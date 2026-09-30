@@ -1,0 +1,88 @@
+from reflection_assessment_feedback.models import Rubric, RubricDimension
+
+EXPERT_RUBRIC = Rubric(
+    rubric_id="unterrichtsreflexion-expert",
+    version="1.0.0",
+    glossary={
+        "bedeutsame_und_reflexionsrelevante_situation": (
+            "Ein auf die Lehrperson bezogener Handlungsmoment oder Interaktionsmoment "
+            "zwischen Lehrpersonen und Schüler:innen oder Schüler:innen untereinander, "
+            "der subjektiv eindrücklich erlebt wird und hohes analytisches "
+            "Entwicklungspotenzial birgt. Routinebrüche, blinde Flecken oder "
+            "pädagogische Dilemmata geben einen konkreten Anlass, das eigene "
+            "professionelle Handeln tiefgreifend zu hinterfragen und weiterzuentwickeln."
+        ),
+        "tiefenstrukturen_und_ursachenanalyse": (
+            "Von oberflächlich beobachtbaren Bedingungen zu tieferen Schichten des "
+            "Unterrichtsgeschehens vordringen, um Ursachen einer Situation zu erklären "
+            "und zu interpretieren. Je nach Reflexionsniveau gehören subjektive oder "
+            "theoriegeleitete Begründungen sowie Kompetenzen, Überzeugungen, Identitäten "
+            "und institutionelle, gesellschaftliche oder ethische Bedingungen dazu. "
+            "Fachdidaktische Theorien und Modelle können die Reflexion unterstützen."
+        ),
+        "handlungsalternativen": (
+            "Zielgerichtete Maßnahmen oder Optionen ableiten, um Diskrepanzen zum "
+            "angestrebten Leistungsstand zu überbrücken und eine Veränderung oder "
+            "Verstetigung des Lehrverhaltens zu ermöglichen. Fachdidaktische Theorien "
+            "und Modelle können die Begründung unterstützen."
+        ),
+        "core_reflections": (
+            "Stärkenorientierte Reflexion innerer und tiefer Ebenen einer Lehrkraft, "
+            "insbesondere professioneller Identität, Idealen, Mission und "
+            "Kernqualitäten. Sie macht diese bewusst und mobilisiert sie, um Alignment "
+            "zwischen Persönlichkeitsebenen und nachhaltige Professionalisierung zu fördern."
+        ),
+        "analyse_und_reflexion": (
+            "Unterrichtsanalyse ist ein methodisch kontrollierter, datengestützter "
+            "Prozess der theoretischen Vorbereitung und wissensbasierten Interpretation. "
+            "Reflexion geht darüber hinaus und erfordert expliziten Selbstbezug: eigene "
+            "Werte, handlungsleitende subjektive Theorien sowie Identität und Mission "
+            "werden kritisch auf das eigene Handeln bezogen."
+        ),
+    },
+    dimensions=[
+        RubricDimension(
+            dimension_id="SW",
+            name="Situationswahrnehmung",
+            description=(
+                "Auswahl, Rekonstruktion und Charakterisierung einer bedeutsamen "
+                "und/oder reflexionsrelevanten Unterrichtssituation."
+            ),
+            bands={
+                "0": "Keine bedeutsame und/oder reflexionsrelevante Situation wird ausgewählt, beschrieben oder rekonstruiert.",
+                "1": "Eine Situation wird benannt, aber keine bedeutsame und/oder reflexionsrelevante Situation wird beschrieben.",
+                "2": "Wählt eine bedeutsame und/oder reflexionsrelevante Situation aus und beschreibt bzw. rekonstruiert sie nachvollziehbar.",
+                "3": "Stellt die Situation präzise, kontextualisiert und differenziert dar; beurteilt ihre Bedeutung oder charakterisiert sie unter Einbezug von Core Reflections, etwa individuellen Wahrnehmungsvoraussetzungen, Werten, Idealen oder Kernqualitäten.",
+            },
+        ),
+        RubricDimension(
+            dimension_id="UA",
+            name="Ursachenanalyse",
+            description=(
+                "Interpretation und Erklärung von Ursachen, Zusammenhängen oder "
+                "zugrunde liegenden Strukturen unter Berücksichtigung der Reflexionsacht "
+                "(Vorbereitung und/oder Durchführung)."
+            ),
+            bands={
+                "0": "Keine Ursachen oder Zusammenhänge werden erklärt oder interpretiert.",
+                "1": "Eine Ursache oder ein Zusammenhang wird benannt bzw. behauptet, aber nicht erklärt.",
+                "2": "Formuliert eine grundsätzlich zielführende Analyse von Ursachen oder Zusammenhängen, begründet oder stützt diese jedoch nicht weiter auf Core Reflections und/oder Theorien.",
+                "3": "Erklärt Ursachen oder Zusammenhänge kohärent, bezieht Core Reflections (z. B. biografische Bezüge, persönliche Werte, Ideale, Identität oder Kernqualitäten) ein und stützt die erklärende Beziehung zusätzlich durch Professionswissen, weitere Unterrichtsbeobachtungen, Literatur oder Perspektivwechsel.",
+            },
+        ),
+        RubricDimension(
+            dimension_id="HA",
+            name="Handlungsalternativen",
+            description=(
+                "Ableitung und Begründung zukunftsorientierter Handlungsoptionen unter "
+                "Berücksichtigung der Reflexionsacht (Vorbereitung und/oder Durchführung)."
+            ),
+            bands={
+                "0": "Keine Konsequenz wird formuliert.",
+                "1": "Nennt eine vage, naive bzw. unplausible Handlungsalternative ohne Begründung und/oder Konsequenz.",
+                "2": "Erkennt Veränderungsbedarf oder nennt eine plausible, zielführende Handlungsalternative beziehungsweise Schlussfolgerung für zukünftige Situationen mit Begründung.",
+                "3": "Leitet eine Handlungsalternative oder Konsequenz nachvollziehbar aus der vorausgehenden Analyse ab, bezieht Core Reflections in die Begründung oder Diskussion ein und verknüpft sie mit relevanten Beobachtungen, erklärten Ursachen oder Zusammenhängen sowie gegebenenfalls Professionswissen oder Theorie.",
+            },
+        ),
+    ],
+)
