@@ -1,0 +1,90 @@
+config_version = 1
+experiment_name = "reflection-assessment-feedback"
+
+[paths]
+provisional_split_directory = "data/provisional_segment_splits"
+classifier_checkpoints = "artifacts/segment-classification"
+human_feedback = "../prebi_ap4_v1/rl1_reflection_analytics/data/raw/human_feedback/testset_human_feedback_by_essay.csv"
+
+[dataset]
+split_names = ["train", "dev", "test"]
+prediction_split = "test"
+exploratory_document_id = "188"
+exploratory_essay_name = "R4"
+exploratory_essay_record_index = 0
+development_essay_name = "R1"
+
+[labels]
+[labels.skill_targets]
+situationserfassung = "target_situationserfassung"
+analyse = "target_analyse"
+konsequenzen = "target_konsequenzen"
+
+[labels.skill_dimensions]
+situationserfassung = "SW"
+analyse = "UA"
+konsequenzen = "HA"
+
+[labels.class_ids.scope]
+out_of_scope = 0
+in_scope = 1
+
+[labels.class_ids.components]
+bands = ["0", "1", "2", "3"]
+end_to_end = ["N", "0", "1", "2", "3"]
+
+[classifier]
+model_name = "deepset/gbert-base"
+model_revision = ""
+max_length = 256
+batch_size = 8
+epochs = 4
+learning_rate = 0.00002
+weight_decay = 0.01
+early_stopping_patience = 2
+early_stopping_min_delta = 0.0001
+seed = 20260929
+class_weight_min = 0.5
+class_weight_max = 4.0
+warmup_ratio = 0.06
+gradient_clip_norm = 1.0
+
+[generation]
+provider = "google"
+model_name = "gemini-3.5-flash-lite"
+repetitions = 1
+temperature = 0.0
+enable_langsmith_tracing = true
+prompt_id = "generation"
+expected_prompt_version = "1.4.0"
+g2_supplemental_prompt_id = "generation_g2_predicted_analysis"
+g2_supplemental_prompt_version = "1.0.0"
+g3_supplemental_prompt_id = "generation_g3_observed_human_analysis"
+g3_supplemental_prompt_version = "1.0.0"
+rubric_id = "unterrichtsreflexion-expert"
+expected_rubric_version = "1.0.0"
+minimum_request_interval_seconds = 7.5
+
+[prompts]
+assessment_quality_human_id = "assessment_quality_human"
+assessment_quality_human_version = "0.3.0"
+assessment_quality_llm_id = "assessment_quality_llm_judge"
+assessment_quality_llm_version = "0.3.0"
+feedback_quality_human_id = "feedback_quality_human"
+feedback_quality_human_version = "0.2.0"
+feedback_quality_llm_id = "feedback_quality_llm_judge"
+feedback_quality_llm_version = "0.2.0"
+feedback_implied_score_human_id = "feedback_implied_score_human"
+feedback_implied_score_human_version = "0.1.0"
+feedback_implied_score_llm_id = "feedback_implied_score_llm_inference"
+feedback_implied_score_llm_version = "0.2.0"
+
+[feedback_implied_score_pilot]
+repetitions = 1
+score_min = 0.0
+score_max = 3.0
+score_step = 0.1
+
+[evaluation]
+random_seed = 20260929
+save_metrics = false

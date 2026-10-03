@@ -1,0 +1,12 @@
+{
+  "manifest_version": 1,
+  "artifacts": [
+    {
+      "id": "unterrichtsreflexion-expert",
+      "version": "1.0.0",
+      "status": "active",
+      "path": "unterrichtsreflexion-expert/1.0.0.json",
+      "sha256": "2807f6d98035ccae7c62898e0b6ce7bd8ab70d99c64d5c45b1ea19d227ce3e95"
+    }
+  ]
+}

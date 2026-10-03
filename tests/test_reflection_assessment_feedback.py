@@ -13,12 +13,16 @@ from reflection_assessment_feedback import (
     EXPERT_RUBRIC,
     GenerationOutput,
     GenerationRequest,
+    HumanAnalysisCandidate,
+    HumanAnalysisContext,
+    HumanSegmentAnalysis,
     IntermediateAnalysis,
     ReflectionDocument,
     ReflectionSegment,
     RubricGenerationRunner,
     SegmentAnalysis,
     eligible_document_ids,
+    load_human_analysis_context,
     load_human_annotated_document,
     make_generation_request,
 )
@@ -45,6 +49,38 @@ def _analysis(source: AnalysisSource = "human") -> IntermediateAnalysis:
                 component_bands={"SW": "2", "UA": "1", "HA": "0"},
             )
         ],
+    )
+
+
+def _imperfect_human_context() -> HumanAnalysisContext:
+    return HumanAnalysisContext(
+        segments=[
+            HumanSegmentAnalysis(
+                segment_id="s1",
+                candidates=[
+                    HumanAnalysisCandidate(
+                        candidate_id="c1",
+                        scope="in_scope",
+                        scope_known=True,
+                        raw_scope_value="1",
+                        component_bands={"SW": "2", "UA": None, "HA": "0"},
+                        raw_component_values={"SW": "2", "UA": "", "HA": "0"},
+                        known_component_bands={"SW": True, "UA": False, "HA": True},
+                        requires_review=True,
+                    ),
+                    HumanAnalysisCandidate(
+                        candidate_id="c2",
+                        scope="out_of_scope",
+                        scope_known=True,
+                        raw_scope_value="0",
+                        component_bands={"SW": None, "UA": None, "HA": None},
+                        raw_component_values={"SW": "", "UA": "", "HA": ""},
+                        known_component_bands={"SW": False, "UA": False, "HA": False},
+                        requires_review=True,
+                    ),
+                ],
+            )
+        ]
     )
 
 
@@ -89,6 +125,63 @@ def test_request_contract_accepts_g1_g2_and_g3() -> None:
         analysis=_analysis("human"),
     )
     assert (g1.condition, g2.condition, g3.condition) == ("G1", "G2", "G3")
+
+
+def test_g3_request_accepts_candidate_grain_imperfect_human_context() -> None:
+    request = make_generation_request(
+        condition="G3",
+        document=_document(),
+        rubric=EXPERT_RUBRIC,
+        analysis=_imperfect_human_context(),
+    )
+
+    assert request.condition == "G3"
+    assert isinstance(request.analysis, HumanAnalysisContext)
+    assert len(request.analysis.segments[0].candidates) == 2
+
+
+def test_g2_rejects_imperfect_human_context() -> None:
+    with pytest.raises(ValidationError, match="analysis source 'predicted'"):
+        make_generation_request(
+            condition="G2",
+            document=_document(),
+            rubric=EXPERT_RUBRIC,
+            analysis=_imperfect_human_context(),
+        )
+
+
+def test_imperfect_human_context_loader_preserves_candidates_and_unknowns(
+    tmp_path: Path,
+) -> None:
+    columns = [
+        "segment_id", "candidate_id", "text", "document_id", "segment_order",
+        "scope_target", "scope_target_known", "requires_review",
+        "target_situationserfassung", "known_situationserfassung",
+        "target_analyse", "known_analyse",
+        "target_konsequenzen", "known_konsequenzen",
+    ]
+    rows = [
+        ["s1", "c1", "Passage", "doc-1", "0", "1", "True", "True", "2", "True", "", "False", "0", "True"],
+        ["s1", "c2", "Passage", "doc-1", "0", "0", "True", "True", "", "False", "", "False", "", "False"],
+    ]
+    csv_path = tmp_path / "annotations.csv"
+    with csv_path.open("w", encoding="utf-8", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(columns)
+        writer.writerows(rows)
+
+    document, context = load_human_analysis_context(csv_path, "doc-1")
+
+    assert len(document.segments) == 1
+    assert len(context.segments) == 1
+    assert [candidate.candidate_id for candidate in context.segments[0].candidates] == ["c1", "c2"]
+    assert [candidate.scope for candidate in context.segments[0].candidates] == [
+        "in_scope", "out_of_scope"
+    ]
+    assert context.segments[0].candidates[0].component_bands["UA"] is None
+    assert context.segments[0].candidates[0].known_component_bands["UA"] is False
+    assert context.segments[0].candidates[0].raw_component_values["UA"] == ""
+    assert all(candidate.requires_review for candidate in context.segments[0].candidates)
 
 
 @pytest.mark.parametrize(
@@ -156,6 +249,16 @@ def test_analysis_summary_uses_only_in_scope_segments() -> None:
     assert summary["SW"].in_scope_segment_count == 2
 
 
+def test_analysis_json_round_trip_recomputes_serialized_summary() -> None:
+    analysis = _analysis("predicted")
+    serialized = analysis.model_dump(mode="json")
+    serialized["summary"][0]["positive_segment_count"] = 999
+
+    restored = IntermediateAnalysis.model_validate(serialized)
+
+    assert restored.model_dump(mode="json")["summary"] == analysis.model_dump(mode="json")["summary"]
+
+
 def test_analysis_summary_excludes_zero_without_penalizing_other_dimensions() -> None:
     analysis = IntermediateAnalysis(
         source="human",
@@ -221,8 +324,8 @@ def test_prompt_includes_supplemental_analysis_only_when_available() -> None:
         )
     )
 
-    assert "Ergänzende Analyse berücksichtigen" not in g1_prompt
-    assert "Ergänzende Analyse berücksichtigen" in g2_prompt
+    assert "Berücksichtige ergänzende Analyse:" not in g1_prompt
+    assert "Berücksichtige ergänzende Analyse:" in g2_prompt
     g1_payload = json.loads(g1_prompt.split("Arbeitsgrundlage (JSON):\n", maxsplit=1)[1])
     g2_payload = json.loads(g2_prompt.split("Arbeitsgrundlage (JSON):\n", maxsplit=1)[1])
     assert "segment_analysis" not in g1_payload
@@ -243,6 +346,28 @@ def test_prompt_includes_supplemental_analysis_only_when_available() -> None:
         "1": 0.0, "2": 100.0, "3": 0.0
     }
     assert summary["HA"]["positive_band_percentages"] is None
+
+
+def test_g3_prompt_preserves_imperfect_human_annotation_candidates() -> None:
+    request = make_generation_request(
+        condition="G3",
+        document=_document(),
+        rubric=EXPERT_RUBRIC,
+        analysis=_imperfect_human_context(),
+    )
+
+    prompt = build_prompt(request)
+    payload = json.loads(prompt.split("Arbeitsgrundlage (JSON):\n", maxsplit=1)[1])
+    segment = payload["reflection"]["segments"][0]
+
+    assert len(segment["human_annotation_candidates"]) == 2
+    assert segment["human_annotation_candidates"][0]["component_bands"]["UA"] is None
+    assert segment["human_annotation_candidates"][0]["known_component_bands"]["UA"] is False
+    assert segment["human_annotation_candidates"][1]["scope"] == "out_of_scope"
+    assert all(item["requires_review"] for item in segment["human_annotation_candidates"])
+    assert payload["segment_analysis"]["representation"] == "candidate_grain_observed_annotations"
+    assert "führe Kandidaten nicht zu einem scheinbar eindeutigen Urteil zusammen" in prompt
+    assert "nicht als Band 0 oder N" in prompt
 
 
 def test_prompt_includes_in_scope_band_three_reflection_segments() -> None:
@@ -406,9 +531,13 @@ def test_shared_runner_adds_condition_trace_metadata() -> None:
     assert run.repetition == 2
     assert run.model_name == "fake-model"
     assert run.generation_parameters == {"temperature": 0.0}
+    assert len(run.prompt_artifact_sha256) == 64
+    assert len(run.rendered_prompt_sha256) == 64
     assert run.feedback_letter.startswith("## Stärken")
     assert model.runnable.config is not None
     assert model.runnable.config["metadata"]["condition"] == "G3"
+    assert model.runnable.config["metadata"]["prompt_artifact_sha256"] == run.prompt_artifact_sha256
+    assert model.runnable.config["metadata"]["rendered_prompt_sha256"] == run.rendered_prompt_sha256
 
 
 def test_runner_fails_closed_when_ambient_tracing_is_enabled(

@@ -1,5 +1,6 @@
 from reflection_assessment_feedback.data import (
     eligible_document_ids,
+    load_human_analysis_context,
     load_human_annotated_document,
     make_generation_request,
 )
@@ -12,6 +13,9 @@ from reflection_assessment_feedback.models import (
     FeedbackPoint,
     GenerationOutput,
     GenerationRequest,
+    HumanAnalysisCandidate,
+    HumanAnalysisContext,
+    HumanSegmentAnalysis,
     IntermediateAnalysis,
     ReflectionDocument,
     ReflectionSegment,
@@ -31,6 +35,9 @@ __all__ = [
     "GenerationOutput",
     "GenerationRequest",
     "GenerationRun",
+    "HumanAnalysisCandidate",
+    "HumanAnalysisContext",
+    "HumanSegmentAnalysis",
     "IntermediateAnalysis",
     "ReflectionDocument",
     "ReflectionSegment",
@@ -39,6 +46,7 @@ __all__ = [
     "RubricGenerationRunner",
     "SegmentAnalysis",
     "eligible_document_ids",
+    "load_human_analysis_context",
     "load_human_annotated_document",
     "make_generation_request",
 ]

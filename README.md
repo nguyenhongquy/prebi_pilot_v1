@@ -1,12 +1,65 @@
 # Structured Intermediate Analysis for LLM-Based Assessment and Feedback
 
-This experiment asks whether an LLM produces more accurate and consistent rubric-based assessment, and more diagnostic and reflection-stimulating feedback, when given structured analysis of a learner's reflection.
+In this experiment, we investigate whether an LLM produces higher quality assessment and feedback, when given structured analysis of a learner's reflection.
 
-The intervention is **analysis-mediated generation**: a scope decision is made for each predefined segment; in-scope segments receive component-specific bands for SW, UA, and HA, which are supplied to the generator as a structured intermediate representation.
+The intervention is **analysis-mediated generation**: for each predefined segment, the system first outputs scope-decision; in-scope segments receive component-specific bands for 3 reflection dimensions, namely SW/Perception, UA/Analysis, and HA/Alternatives. Both reflection dimensions and performance band analysis are then supplied to the generator as a structured intermediate representation.
 
-**Status:** Segment-classification notebooks and a shared G1/G2/G3 generation prototype are available. G2 prediction integration and the complete evaluation workflow remain in progress.
+**Status:** 
+
+- Segment-classification notebooks and an R1 development batch for G1/G2/G3 are available.
+- Full test-set prediction, adjudicated G3 analysis, and confirmatory evaluation remain in progress.
+
+## Human Rating UI
+
+The standalone browser app lives in [rating-ui/](rating-ui/). It opens directly to the three rating tasks and does not require the other repository's workbench,
+a Python API, or a model provider.
+
+```bash
+npm --prefix rating-ui install
+npm --prefix rating-ui run dev
+```
+
+1. Open the localhost URL printed by Vite (normally `http://127.0.0.1:5174`).
+2. Upload only blinded packet JSON, never the protected condition key.
+3. Drafts and submitted ratings stay in browser-local storage; download results for protected collection.
+4. See [rating-ui/README.md](rating-ui/README.md) for build and data-handling details.
 
 ## Running the Notebooks
+
+| Order | Notebook                                                                      | Purpose                                                  |
+| ----- | ----------------------------------------------------------------------------- | -------------------------------------------------------- |
+| 00    | [00_segment_classification_ml.ipynb](00_segment_classification_ml.ipynb)       | Classical machine-learning segment classification        |
+| 01    | [01_segment_classification.ipynb](01_segment_classification.ipynb)             | GBERT segment classification                             |
+| 02    | [02_segment_inference.ipynb](02_segment_inference.ipynb)                       | Saved-model segment inference                            |
+| 03    | [03_generate_g1_g3.ipynb](03_generate_g1_g3.ipynb)                             | Paired G1/G3 generation                                  |
+| 04    | [04_generate_g2.ipynb](04_generate_g2.ipynb)                                   | G2 generation matched to predictions and G1/G3 artifacts |
+| 05    | [05_segment_evaluation.ipynb](05_segment_evaluation.ipynb)                     | Segment evaluation                                       |
+| 06    | [06_feedback_implied_score_pilot.ipynb](06_feedback_implied_score_pilot.ipynb) | Feedback-implied score pilot                             |
+| 07    | [07_rating_packet_export.ipynb](07_rating_packet_export.ipynb)                 | Local preflight and protected blinded-packet export      |
+
+- Training, provider calls, and exports retain their explicit switches.
+- Segment evaluation can run after inference independently of generation.
+
+The opening section of [05_segment_evaluation.ipynb](05_segment_evaluation.ipynb) compares TF-IDF ML with the saved direct GBERT cascade on the complete test split.
+Run Cells 1-5 independently of the optional saved-artifact workflow below them. In Cell 2, set `RUN_MODEL_COMPARISON=True` and either provide a trusted
+`ML_MODEL_PATH` (also accepted through `PREBI_ML_MODEL_PATH`) or set
+`SELECT_ML_ON_DEV=True` to select settings using train/dev only. Set
+`GBERT_DEVICE='mps'` on supported Macs or leave the CPU default. GBERT uses cached
+tokenizer/config files and local checkpoints only; no provider calls or downloads
+occur. The shared scorer retains candidate bundles and reports scope, skills on
+gold scope, and end-to-end labels, with fixed-label and supported-class macro-F1,
+per-class support, a comparison chart, and local timing. Timing includes GBERT
+head loading and is not warmed-throughput benchmarking. Older GBERT metadata
+lacks training-split fingerprints, so verify its training export before treating
+the comparison as confirmatory. `SAVE_COMPARISON=True` exports aggregate metrics
+and provenance only to approved protected storage.
+
+The packet-export notebook builds 42 R1 development packets from saved generation
+artifacts and the config-pinned human-feedback CSV. It defaults to
+`WRITE_PACKETS = False`, prints counts rather than research text, and makes no
+provider or tracing calls. To export, enable writing in Cell 2 and rerun Cells 2,
+3, and 5. Upload only the packet bundle to the rating UI; keep the condition key
+restricted. Existing exports are never overwritten.
 
 From the `prebi_v1` project root, install the environment and optional Gemini integration:
 
@@ -16,15 +69,57 @@ uv sync --locked --extra dev --extra gemini
 
 Open a notebook in VS Code and select the workspace `.venv` Python kernel. Keep the working directory at the `prebi_v1` project root so relative data paths resolve.
 
+Shared, non-secret experiment settings are in [config/experiment.toml](config/experiment.toml): data selectors and paths, classifier hyperparameters, generator model and repetitions, expected prompt/rubric versions, tracing preference, and evaluation seed. The notebooks load this file through `reflection_assessment_feedback.experiment_config`; persisted prediction and generation artifacts include its SHA-256 fingerprint. Keep API keys and `PREBI_DATA_ROOT` in the local `.env`, not in TOML. Runtime actions such as training, writing predictions, provider approval, and metric export remain explicit notebook switches.
+
+Versioned prompt artifacts and human coding protocols live under [prompts/](prompts/), indexed by [prompts/manifest.json](prompts/manifest.json). The active generation prompt is `generation@1.4.0`; its G2 predicted-analysis and G3 observed-human-analysis supplemental sections are separate versioned prompt fragments. Assessment-quality instruments are pinned to `0.3.0` and feedback-quality instruments to `0.2.0`, both using three-point quality ratings plus unable-to-judge. Assessment quality uses Score-Rubric Fit, Evidence Support, and Justification Quality. Feedback quality uses correctness and developmental usefulness. Feedback-implied coding remains raw scores 0.0-3.0 in tenths, with human guide `0.1.0` and LLM prompt `0.2.0`. All rating instruments are development drafts requiring calibration before confirmatory use. `reflection_assessment_feedback.prompt_registry` verifies artifact hashes and renders templates with exact variable checking. The rubric is a separate versioned instrument under [rubrics/](rubrics/), not prompt text. New generation runs store prompt-component, rubric-artifact, and fully rendered prompt hashes; rating records should likewise store the human-protocol or LLM-prompt version used.
+
+The feedback-implied score pilot entry point is [06_feedback_implied_score_pilot.ipynb](06_feedback_implied_score_pilot.ipynb), backed by `reflection_assessment_feedback.feedback_implied_scoring`. Its preflight is local-only; the LLM execution cell defaults to `APPROVE_EXTERNAL_PROCESSING = False`. The R1 pilot contains six documents and infers scores separately for SW, UA, and HA. It records `not_inferable` rather than forcing a score, validates evidence offsets against the human feedback, rate-limits provider calls, and writes run records only under protected `PREBI_DATA_ROOT`.
+
+Never edit a registered protocol version or exported packet in place. Existing
+`0.1.0` quality packets retain their five-point scale and original criteria; the
+UI reads the scale and anchors from each packet. New exports use the config-pinned
+guides (assessment `0.3.0`, feedback `0.2.0`). Assessment `0.2.0` packets retain
+their four criteria. Preserve old packets and ratings separately and do not pool scores
+across protocol versions. The exporter still refuses to overwrite existing files.
+
 ### 1. Segment classification
 
-Open [1_segment_classification.ipynb](1_segment_classification.ipynb) and run cells in order. The initial cells validate the prepared train/dev/test splits, show label distributions, and define the GBERT training and evaluation functions. Training is opt-in: in **Train and evaluate**, change `RUN_TRAINING` from `False` to `True`, then run that cell and the following evaluation cell. This downloads `deepset/gbert-base`, trains both classifier variants, evaluates on the held-out test split, and writes checkpoints and summaries under `artifacts/segment-classification/`. Keep artifacts and research data private. Do not use test results to choose models or hyperparameters.
+For a fast CPU-only alternative, open [00_segment_classification_ml.ipynb](00_segment_classification_ml.ipynb).
+The reusable implementation is [reflection_assessment_feedback/segment_classification_ml.py](reflection_assessment_feedback/segment_classification_ml.py).
+It combines word 1-2 grams and character 3-5 grams with logistic regression,
+and optionally compares LinearSVC. Both direct (4 heads) and hierarchical
+presence-then-band (7 heads) cascades are supported. Training preserves candidate
+bundles, honors canonical quality exclusions, and uses a configurable 10-character
+minimum. Author/document/segment separation is checked before fitting; vocabulary
+and heads learn only from train. Dev selects settings using mean end-to-end
+macro-F1 over gold-supported labels, while reports retain fixed-label per-class
+metrics, including zero-support classes. Skills are also evaluated on gold scope.
+
+Run the ML notebook in order with its defaults first. Set `RUN_TRAINING=True` in
+Cell 2 to run the dev comparison. `RUN_TEST_EVALUATION` separately enables final
+test reporting; never tune from those results. Set `SAVE_MODEL=True` to save the
+selected model, settings, train/dev file hashes, and dev results under protected
+`PREBI_DATA_ROOT/segment-classification-ml/`. TF-IDF vocabularies can retain
+research terms: do not commit models or save them in the source tree. Joblib
+loading executes serialized code; load only your own trusted artifacts with the
+same scikit-learn version used for training.
+
+For ML-backed G2, in [04_generate_g2.ipynb](04_generate_g2.ipynb) set
+`PREDICTION_BACKEND='tfidf'`, provide `ML_MODEL_PATH`, and enable
+`WRITE_ML_PREDICTIONS` in the prediction-loading cell. This performs local
+inference without provider calls and stores predictions under
+`PREBI_DATA_ROOT/g2/predictions/tfidf/<model-sha256>/`. Config, model, document,
+source, and coverage checks run before generation. Prediction hashes distinguish
+downstream G2 runs. GBERT remains the default and its artifacts are unchanged;
+do not pool classifier versions or backends in evaluation.
+
+Open [01_segment_classification.ipynb](01_segment_classification.ipynb) and run cells in order. The initial cells validate the prepared train/dev/test splits, show label distributions, and define the GBERT training and evaluation functions. Training is opt-in: in **Train and evaluate**, change `RUN_TRAINING` from `False` to `True`, then run that cell and the following evaluation cell. This downloads `deepset/gbert-base`, trains both classifier variants, evaluates on the held-out test split, and writes checkpoints and summaries under `artifacts/segment-classification/`. Keep artifacts and research data private. Do not use test results to choose models or hyperparameters.
 
 ### 2. G1/G3 generation demo
 
-Open [G1_G3_Demo.ipynb](G1_G3_Demo.ipynb) and run the document-setup and tracing-policy cells first. Adjust `DOCUMENT_INDEX` to select an eligible document; the current demo reads the provisional test split, so reserve it for an approved pilot or final test, not prompt tuning. The final generation cell is deliberately gated: set `APPROVE_EXTERNAL_PROCESSING = True` only after confirming provider approval, and configure `GOOGLE_API_KEY` or `GEMINI_API_KEY` outside the notebook. It runs repeated G1 and G3 generations; outputs stay in notebook memory and are not automatically saved. LangSmith tracing is off by default; enable it only after confirming that the tracing workspace is approved for this protected text. Copy `.env.example` to `.env` and configure `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT`, and the EU `LANGSMITH_ENDPOINT` to opt into tracing. The runner checks project access through the configured regional endpoint before calling the model, creates a traceable parent span around its Python generation orchestration, and nests the LangChain model call under that project.
+The current development cohort is all six R1 documents in the test split, selected through `config/experiment.toml`. [03_generate_g1_g3.ipynb](03_generate_g1_g3.ipynb) loads each document's candidate-grain human annotations, including review flags, alternatives, and missing values; it does not adjudicate or flatten them. G3 therefore represents generation with observed, imperfect human analysis, not an oracle condition. The notebook makes one G1 and one G3 Gemini request per document and stores a separate protected comparison artifact per document. Requests share a lock-based 7.5-second minimum interval. Provider processing is gated by `APPROVE_EXTERNAL_PROCESSING`; the approved exploratory batch has tracing enabled. Traces may contain full reflections, prompts, and outputs; configure the LangSmith credentials in `.env` and ensure project access and retention are approved.
 
-Open [G2_Demo.ipynb](G2_Demo.ipynb) for the predicted-analysis condition. It uses the same shared request and runner implementation in `reflection_assessment_feedback/`, but requires classifier inference to produce a document-scoped predicted-analysis artifact under `PREBI_DATA_ROOT/g2/predicted-analysis.json`. That inference workflow is not implemented yet; the notebook will wait for the artifact and will not substitute G3 human labels.
+[02_segment_inference.ipynb](02_segment_inference.ipynb) runs the four local classifiers over the six R1 documents and saves one predicted-analysis artifact per document under `PREBI_DATA_ROOT/g2/predictions/`. [04_generate_g2.ipynb](04_generate_g2.ipynb) checks each artifact against the matching G1/G3 pair, then generates and persists one G2 run per document under `PREBI_DATA_ROOT/g2/demo-runs/`. The development batch used 18 Gemini generation requests total (six documents × three conditions) at one repetition, paced below the stated 10 RPM / 250 RPD free-tier limits. This is not a full-test-set or confirmatory batch; document 188 remains separately classified as exploratory.
 
 ## Research Questions
 
@@ -38,15 +133,15 @@ We hypothesize that, compared with direct generation, analysis-mediated generati
 
 The experiment uses the same reflection texts, rubric, generator model, prompt template and shared prompt content, output schema, and generation settings across conditions. The only condition-specific addition to the generator input is segment analysis: it is omitted in G1, predicted in G2, and human-annotated in G3.
 
-| Condition                                         | Generator input                                              | Role            |
-| ------------------------------------------------- | ------------------------------------------------------------ | --------------- |
-| G1<br />Direct generation                         | Segmented reflection + rubric                                | Baseline        |
-| G2<br />Predicted-analysis-mediated intervention | Segmented reflection + rubric + predicted segment analysis | Proposed        |
-| G3<br />Oracle-analysis-mediated                  | Segmented reflection + rubric + human-annotated segment     | Oracle/headroom |
+| Condition                                         | Generator input                                                                                 | Role                      |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------- |
+| G1<br />Direct generation                         | Segmented reflection + rubric                                                                   | Baseline                  |
+| G2<br />Predicted-analysis-mediated intervention | Segmented reflection + rubric + predicted segment analysis                                    | Proposed                  |
+| G3<br />Observed-human-analysis-mediated          | Segmented reflection + rubric + candidate-grain human analysis, including review/unknown states | Human-reference condition |
 
 ---
 
-The same prompt template, shared prompt content, and all other generator inputs are used in every condition. G2 and G3 differ only in the supplied analysis source. This allows G1 → G2 to estimate the effect of adding predicted segment analysis and G2 → G3 to compare predicted analysis with human-annotated analysis.
+The same prompt template, shared prompt content, and all other generator inputs are used in every condition. G2 and G3 differ in the supplied analysis source: predicted analysis versus recorded human candidate annotations. For the R1 development batch, G3 preserves ambiguity, candidate alternatives, review flags, and missing values; it is not a perfect oracle. Interpret G2 → G3 as a comparison against observed human analysis, and report analysis completeness/review status alongside the condition results.
 
 ## Proposed Pipeline
 
@@ -255,7 +350,7 @@ The experiment protocol must define the rubric score levels and how `overall_sco
 
 ## Evaluation
 
-The proposed operationalization evaluates assessment and feedback separately. Human reference scores and segment annotations should be finalized independently of the generated outputs. G1 vs G2 is the primary comparison; G2 vs G3 is a secondary comparison that estimates remaining headroom.
+The proposed operationalization evaluates assessment and feedback separately. Human reference scores and segment annotations should be finalized independently of the generated outputs. G1 vs G2 is the primary comparison; G2 vs G3 is a secondary development comparison against observed human analysis. Because the current G3 batch preserves unresolved annotation states, it does not estimate a clean oracle headroom effect.
 
 ### Deterministic metrics
 
@@ -270,16 +365,26 @@ For condition comparisons, first summarize repeated runs within each reflection,
 
 ### Multidimensional rating criteria
 
-The LLM judge and human raters use the same four criteria and 3-point anchors. Provide the reflection segments, rubric, and generated assessment/feedback; omit the condition, generator identity, intermediate analysis, and run metadata. Score each criterion separately:
+Human raters and LLM judges use the same task-specific criteria and 3-point
+anchors. Assessment packets show reflection, rubric, and assessment only;
+feedback packets show reflection, rubric, and feedback only. Hide condition,
+generator identity, intermediate analysis, and run metadata.
 
-| Criterion                        | 1: Not met                                                                                  | 2: Partly met                                                                           | 3: Clearly met                                                                                                                   |
-| -------------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Assessment justification         | Rationale is absent, contradicts the score, or does not use the rubric.                     | Rationale is partly rubric-aligned but leaves important scores or evidence unexplained. | Rationale explains the scores using the relevant rubric descriptors and reflection evidence.                                     |
-| Evidence grounding               | Key assessment or feedback claims are unsupported, contradicted, or cite the wrong segment. | Some claims are supported, but support is vague, incomplete, or uneven.                 | Key claims are accurate and supported by relevant, correctly identified reflection segments.                                     |
-| Feedback diagnostic precision    | Feedback is generic, misdiagnoses the reflection, or identifies no specific gap.            | Feedback identifies a plausible gap but is vague, incomplete, or partly inaccurate.     | Feedback accurately identifies a specific gap and grounds it in the reflection and relevant rubric expectations.                 |
-| Reflection-stimulating potential | Feedback does not invite further reflection, closes it down, or supplies a leading answer.  | Feedback invites reflection but does so generically or at limited depth.                | Feedback uses a relevant, open prompt to help the learner examine reasoning, evidence, assumptions, alternatives, or next steps. |
+| Task                | Criterion                | Main question                                                                 |
+| ------------------- | ------------------------ | ----------------------------------------------------------------------------- |
+| Assessment`0.3.0` | Score-Rubric Fit         | Is the assigned score plausible given reflection and rubric anchors?          |
+| Assessment`0.3.0` | Evidence Support         | Does the cited evidence actually support the claims?                          |
+| Assessment`0.3.0` | Justification Quality    | Does the rationale clearly explain how evidence and rubric lead to the score? |
+| Feedback`0.2.0`   | Correctness              | Are claims accurate and defensible? Explicit citations are not required.      |
+| Feedback`0.2.0`   | Developmental usefulness | Is there a clear, relevant next step or productive reflective direction?      |
 
-Each LLM-judge result contains one integer score (`1`, `2`, or `3`) per criterion, a short justification, and segment references where applicable. Report criterion-level distributions; do not combine criteria into a primary aggregate. A mean criterion score may be included as a secondary summary. Freeze the judge model, prompt, and decoding settings, and pilot the anchors on a human-reviewed sample before full evaluation. LLM-judge ratings are preliminary automated evidence, not a substitute for human ratings.
+Use the criterion-specific anchors in the registered protocols and packet.
+Score each criterion separately (`1`, `2`, or `3`), or null with unable-to-judge
+and a reason for missing information. Evidence validity and reasoning clarity
+are separate judgments. Report criterion-level distributions without averaging
+them into an overall quality score. Freeze judge settings and calibrate the
+anchors before full evaluation. LLM ratings are preliminary automated evidence,
+not a substitute for human ratings.
 
 ### Human multidimensional ratings
 
@@ -296,7 +401,7 @@ An automated LLM-judge result follows a structured contract such as:
 ```json
 {
   "run_id": "run_...",
-  "criterion": "evidence_grounding",
+  "criterion": "evidence_support",
   "score": 3,
   "justification": "...",
   "evidence": [

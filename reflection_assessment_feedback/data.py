@@ -7,6 +7,9 @@ from pathlib import Path
 from reflection_assessment_feedback.models import (
     DIMENSION_IDS,
     GenerationRequest,
+    HumanAnalysisCandidate,
+    HumanAnalysisContext,
+    HumanSegmentAnalysis,
     IntermediateAnalysis,
     ReflectionDocument,
     ReflectionSegment,
@@ -119,6 +122,80 @@ def load_human_annotated_document(
     return ReflectionDocument(document_id=document_id, segments=segments), analysis
 
 
+def load_human_analysis_context(
+    csv_path: str | Path,
+    document_id: str,
+) -> tuple[ReflectionDocument, HumanAnalysisContext]:
+    rows = _read_document_rows(csv_path, document_id)
+    rows_by_segment: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for row in rows:
+        rows_by_segment[row["segment_id"]].append(row)
+
+    document_segments: list[ReflectionSegment] = []
+    human_segments: list[HumanSegmentAnalysis] = []
+    for segment_id, candidate_rows in rows_by_segment.items():
+        texts = {row["text"].strip() for row in candidate_rows}
+        orders = {int(row["segment_order"]) for row in candidate_rows}
+        if len(texts) != 1 or len(orders) != 1:
+            raise ValueError("Candidate copies disagree on segment text or source order.")
+        document_segments.append(
+            ReflectionSegment(
+                segment_id=segment_id,
+                text=next(iter(texts)),
+                order=next(iter(orders)),
+            )
+        )
+
+        candidates = []
+        for row in candidate_rows:
+            scope_value = row["scope_target"].strip()
+            scope_known = _is_true(row["scope_target_known"])
+            scope = (
+                {"0": "out_of_scope", "1": "in_scope"}.get(scope_value)
+                if scope_known
+                else None
+            )
+            raw_component_values = {
+                dimension_id: row[TARGET_COLUMNS[dimension_id]].strip()
+                for dimension_id in DIMENSION_IDS
+            }
+            component_bands = {
+                dimension_id: (
+                    raw_component_values[dimension_id]
+                    if raw_component_values[dimension_id] in {"N", "0", "1", "2", "3"}
+                    else None
+                )
+                for dimension_id in DIMENSION_IDS
+            }
+            known_component_bands = {
+                dimension_id: _is_true(row[KNOWN_COLUMNS[dimension_id]])
+                for dimension_id in DIMENSION_IDS
+            }
+            candidates.append(
+                HumanAnalysisCandidate(
+                    candidate_id=row["candidate_id"].strip(),
+                    scope=scope,
+                    scope_known=scope_known,
+                    raw_scope_value=scope_value,
+                    component_bands=component_bands,
+                    raw_component_values=raw_component_values,
+                    known_component_bands=known_component_bands,
+                    requires_review=_is_true(row["requires_review"]),
+                )
+            )
+        human_segments.append(
+            HumanSegmentAnalysis(segment_id=segment_id, candidates=candidates)
+        )
+
+    document_segments.sort(key=lambda segment: segment.order)
+    human_by_id = {segment.segment_id: segment for segment in human_segments}
+    document = ReflectionDocument(document_id=document_id, segments=document_segments)
+    context = HumanAnalysisContext(
+        segments=[human_by_id[segment.segment_id] for segment in document_segments]
+    )
+    return document, context
+
+
 def eligible_document_ids(csv_path: str | Path) -> list[str]:
     with Path(csv_path).open(encoding="utf-8-sig", newline="") as file:
         reader = csv.DictReader(file)
@@ -140,7 +217,7 @@ def make_generation_request(
     condition: str,
     document: ReflectionDocument,
     rubric: Rubric,
-    analysis: IntermediateAnalysis | None = None,
+    analysis: IntermediateAnalysis | HumanAnalysisContext | None = None,
 ) -> GenerationRequest:
     return GenerationRequest(
         condition=condition,

@@ -1,0 +1,165 @@
+{
+  "manifest_version": 1,
+  "artifacts": [
+    {
+      "id": "assessment_quality_human",
+      "version": "0.3.0",
+      "task": "assessment_quality",
+      "modality": "human_protocol",
+      "status": "development_draft",
+      "path": "assessment_quality/human/0.3.0.md",
+      "sha256": "8bac8fda637a46a51a9d6239b8181b6b62d472f7f46046c6468fe99c352c087e",
+      "variables": []
+    },
+    {
+      "id": "assessment_quality_llm_judge",
+      "version": "0.3.0",
+      "task": "assessment_quality",
+      "modality": "llm_prompt",
+      "status": "development_draft",
+      "path": "assessment_quality/llm/0.3.0.md",
+      "sha256": "fa1c8d9700dfffcbfbc25af446ab64dc44bda0f642e147d614f5039c94463af7",
+      "variables": ["packet_json"]
+    },
+    {
+      "id": "feedback_quality_human",
+      "version": "0.2.0",
+      "task": "feedback_quality",
+      "modality": "human_protocol",
+      "status": "development_draft",
+      "path": "feedback_quality/human/0.2.0.md",
+      "sha256": "a4ff07b319acc7ddaf783ad3bcb4457493c272a4db2e42a704123ac78f67b04e",
+      "variables": []
+    },
+    {
+      "id": "feedback_quality_llm_judge",
+      "version": "0.2.0",
+      "task": "feedback_quality",
+      "modality": "llm_prompt",
+      "status": "development_draft",
+      "path": "feedback_quality/llm/0.2.0.md",
+      "sha256": "f756b8806e2830a9eb127d7b3540a221bdc312652aad9f58d4019f9ed8783ad5",
+      "variables": ["packet_json"]
+    },
+    {
+      "id": "assessment_quality_human",
+      "version": "0.2.0",
+      "task": "assessment_quality",
+      "modality": "human_protocol",
+      "status": "development_draft",
+      "path": "assessment_quality/human/0.2.0.md",
+      "sha256": "a6f5b24399c017fec61e57dc3984f235d4cec8e062be9bb73efc26c4aeee8b41",
+      "variables": []
+    },
+    {
+      "id": "assessment_quality_llm_judge",
+      "version": "0.2.0",
+      "task": "assessment_quality",
+      "modality": "llm_prompt",
+      "status": "development_draft",
+      "path": "assessment_quality/llm/0.2.0.md",
+      "sha256": "b03b77754a7bc367ce26eadcb98f479c1ac0a16870feb83fd7918dc911dd50cb",
+      "variables": ["packet_json"]
+    },
+    {
+      "id": "generation",
+      "version": "1.4.0",
+      "task": "generation",
+      "modality": "llm_prompt",
+      "status": "active",
+      "path": "generation/1.4.0/system.md",
+      "sha256": "5ada20076d6d3198853eccf53e1e13ab596f9cdf83d9102eb9c575188db0d360",
+      "variables": []
+    },
+    {
+      "id": "generation_g2_predicted_analysis",
+      "version": "1.0.0",
+      "task": "generation_g2_supplemental",
+      "modality": "llm_prompt_fragment",
+      "status": "active",
+      "path": "generation/1.4.0/g2-predicted-analysis.md",
+      "sha256": "8eb0421ef11c968e4c71ce6920f096be9b5f87641f010237a756a471cc9b4a77",
+      "variables": []
+    },
+    {
+      "id": "generation_g3_observed_human_analysis",
+      "version": "1.0.0",
+      "task": "generation_g3_supplemental",
+      "modality": "llm_prompt_fragment",
+      "status": "active",
+      "path": "generation/1.4.0/g3-observed-human-analysis.md",
+      "sha256": "6857fa5e828c304c21164f6bb07edd046ef2087352c5d9a58855d5b0b7de2e4c",
+      "variables": []
+    },
+    {
+      "id": "feedback_quality_human",
+      "version": "0.1.0",
+      "task": "feedback_quality",
+      "modality": "human_protocol",
+      "status": "development_draft",
+      "path": "feedback_quality/human/0.1.0.md",
+      "sha256": "35806fae4daa8f74764b026124ea23a530ee9347b564c1ce9256fec799eb4481",
+      "variables": []
+    },
+    {
+      "id": "assessment_quality_human",
+      "version": "0.1.0",
+      "task": "assessment_quality",
+      "modality": "human_protocol",
+      "status": "development_draft",
+      "path": "assessment_quality/human/0.1.0.md",
+      "sha256": "e6490e11817110fb63c88f2e22c2be4bb06243896f194e7bd251478e9e4bd7ef",
+      "variables": []
+    },
+    {
+      "id": "assessment_quality_llm_judge",
+      "version": "0.1.0",
+      "task": "assessment_quality",
+      "modality": "llm_prompt",
+      "status": "development_draft",
+      "path": "assessment_quality/llm/0.1.0.md",
+      "sha256": "6faa690b3ecae61935409bdd4b0fa2e1afc422f4a6f4b81d60bb3e8d8153bd77",
+      "variables": ["packet_json"]
+    },
+    {
+      "id": "feedback_quality_llm_judge",
+      "version": "0.1.0",
+      "task": "feedback_quality",
+      "modality": "llm_prompt",
+      "status": "development_draft",
+      "path": "feedback_quality/llm/0.1.0.md",
+      "sha256": "678a303fba26704141c3461da9eec25128ecb4ec33049f259007f9022c245ae3",
+      "variables": ["packet_json"]
+    },
+    {
+      "id": "feedback_implied_score_human",
+      "version": "0.1.0",
+      "task": "feedback_implied_score",
+      "modality": "human_protocol",
+      "status": "development_draft",
+      "path": "feedback_implied_score/human/0.1.0.md",
+      "sha256": "646beba599437c75bf6d987383b9d77569a63c93b385a686e71b85f410aa865f",
+      "variables": []
+    },
+    {
+      "id": "feedback_implied_score_llm_inference",
+      "version": "0.1.0",
+      "task": "feedback_implied_score",
+      "modality": "llm_prompt",
+      "status": "development_draft",
+      "path": "feedback_implied_score/llm/0.1.0.md",
+      "sha256": "1ae0061679ed828292acee60217f14678af823690f3d760bfde81c69b455ad8c",
+      "variables": ["packet_json"]
+    },
+    {
+      "id": "feedback_implied_score_llm_inference",
+      "version": "0.2.0",
+      "task": "feedback_implied_score",
+      "modality": "llm_prompt",
+      "status": "development_draft",
+      "path": "feedback_implied_score/llm/0.2.0.md",
+      "sha256": "cb502be759711e770fdc9d0de642df2f619cf5ecb69ca2faaddd3b12281fd3f4",
+      "variables": ["packet_json"]
+    }
+  ]
+}

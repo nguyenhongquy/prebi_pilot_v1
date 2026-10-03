@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -14,7 +15,13 @@ from reflection_assessment_feedback.models import (
     GenerationRequest,
     ReflectionDocument,
 )
-from reflection_assessment_feedback.prompt import PROMPT_VERSION, build_prompt
+from reflection_assessment_feedback.prompt import (
+    PROMPT_ARTIFACT,
+    PROMPT_VERSION,
+    build_prompt,
+    prompt_components_for_request,
+)
+from reflection_assessment_feedback.rubric import RUBRIC_ARTIFACT
 
 LANGSMITH_EU_ENDPOINT = "https://eu.api.smith.langchain.com"
 
@@ -38,6 +45,10 @@ class GenerationRun:
     model_name: str
     generation_parameters: dict[str, Any]
     prompt_version: str
+    prompt_artifact_sha256: str
+    rendered_prompt_sha256: str
+    prompt_components: list[dict[str, str]]
+    rubric_artifact_sha256: str
     output: GenerationOutput
     feedback_letter: str
 
@@ -183,6 +194,16 @@ class RubricGenerationRunner:
             if (value := getattr(self._model, name, None)) is not None
         }
         runnable = self._model.with_structured_output(GenerationOutput)
+        prompt_text = build_prompt(request)
+        rendered_prompt_sha256 = hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()
+        prompt_components = [
+            {
+                "artifact_id": artifact.artifact_id,
+                "version": artifact.version,
+                "sha256": artifact.sha256,
+            }
+            for artifact in prompt_components_for_request(request)
+        ]
         config: dict[str, Any] = {
             "run_name": f"rubric-generation-{request.condition.lower()}",
             "tags": ["direct-generation", request.condition],
@@ -195,12 +216,16 @@ class RubricGenerationRunner:
                 "rubric_id": request.rubric.rubric_id,
                 "rubric_version": request.rubric.version,
                 "prompt_version": PROMPT_VERSION,
+                "prompt_artifact_sha256": PROMPT_ARTIFACT.sha256,
+                "rendered_prompt_sha256": rendered_prompt_sha256,
+                "prompt_components": prompt_components,
+                "rubric_artifact_sha256": RUBRIC_ARTIFACT.sha256,
             },
         }
         if not self._enable_langsmith_tracing:
             config["callbacks"] = []
         result = runnable.invoke(
-            build_prompt(request),
+            prompt_text,
             config=config,
         )
         output = (
@@ -216,6 +241,10 @@ class RubricGenerationRunner:
             model_name=model_name,
             generation_parameters=generation_parameters,
             prompt_version=PROMPT_VERSION,
+            prompt_artifact_sha256=PROMPT_ARTIFACT.sha256,
+            rendered_prompt_sha256=rendered_prompt_sha256,
+            prompt_components=prompt_components,
+            rubric_artifact_sha256=RUBRIC_ARTIFACT.sha256,
             output=output,
             feedback_letter=render_feedback_letter(output),
         )

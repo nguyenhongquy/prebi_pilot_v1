@@ -111,6 +111,14 @@ class IntermediateAnalysis(StrictModel):
     source: AnalysisSource
     segments: list[SegmentAnalysis] = Field(min_length=1)
 
+    @model_validator(mode="before")
+    @classmethod
+    def discard_serialized_summary(cls, data):
+        if isinstance(data, dict) and "summary" in data:
+            data = data.copy()
+            data.pop("summary")
+        return data
+
     @computed_field
     @property
     def summary(self) -> list[DimensionAnalysisSummary] | None:
@@ -147,11 +155,49 @@ class IntermediateAnalysis(StrictModel):
         return summaries
 
 
+class HumanAnalysisCandidate(StrictModel):
+    candidate_id: str = Field(min_length=1)
+    scope: Scope | None
+    scope_known: bool
+    raw_scope_value: str
+    component_bands: dict[str, ComponentLabel | None] = Field(min_length=3, max_length=3)
+    raw_component_values: dict[str, str] = Field(min_length=3, max_length=3)
+    known_component_bands: dict[str, bool] = Field(min_length=3, max_length=3)
+    requires_review: bool
+
+    @model_validator(mode="after")
+    def validate_dimensions(self) -> HumanAnalysisCandidate:
+        if set(self.component_bands) != set(DIMENSION_IDS):
+            raise ValueError(f"Human annotation must define exactly {DIMENSION_IDS} component values.")
+        if set(self.raw_component_values) != set(DIMENSION_IDS):
+            raise ValueError(f"Human annotation must preserve raw values for exactly {DIMENSION_IDS}.")
+        if set(self.known_component_bands) != set(DIMENSION_IDS):
+            raise ValueError(f"Human annotation must define known flags for exactly {DIMENSION_IDS}.")
+        return self
+
+
+class HumanSegmentAnalysis(StrictModel):
+    segment_id: str = Field(min_length=1)
+    candidates: list[HumanAnalysisCandidate] = Field(min_length=1)
+
+
+class HumanAnalysisContext(StrictModel):
+    source: Literal["human"] = "human"
+    segments: list[HumanSegmentAnalysis] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_segments(self) -> HumanAnalysisContext:
+        ids = [segment.segment_id for segment in self.segments]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Human analysis context must group each segment exactly once.")
+        return self
+
+
 class GenerationRequest(StrictModel):
     condition: Condition
     document: ReflectionDocument
     rubric: Rubric
-    analysis: IntermediateAnalysis | None = None
+    analysis: IntermediateAnalysis | HumanAnalysisContext | None = None
 
     @model_validator(mode="after")
     def validate_analysis(self) -> GenerationRequest:
@@ -166,6 +212,8 @@ class GenerationRequest(StrictModel):
             raise ValueError(
                 f"{self.condition} requires analysis source {required_source!r}."
             )
+        if self.condition == "G2" and not isinstance(self.analysis, IntermediateAnalysis):
+            raise ValueError("G2 requires complete predicted intermediate analysis.")
         document_ids = {segment.segment_id for segment in self.document.segments}
         analysis_ids = [segment.segment_id for segment in self.analysis.segments]
         if len(analysis_ids) != len(set(analysis_ids)):

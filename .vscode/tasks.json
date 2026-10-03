@@ -1,0 +1,18 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Start standalone rating UI",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"--prefix",
+				"rating-ui",
+				"run",
+				"dev"
+			],
+			"isBackground": true,
+			"problemMatcher": []
+		}
+	]
+}
