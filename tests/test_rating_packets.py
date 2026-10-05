@@ -107,7 +107,11 @@ def test_revised_quality_llm_prompts_are_registered_and_renderable(task: str) ->
     config = load_experiment_config()["prompts"]
     artifact = resolve_prompt(config[f"{task}_llm_id"], config[f"{task}_llm_version"])
     rendered, digest = render_prompt(artifact, packet_json="{}")
-    assert artifact.version == ("0.3.0" if task == "assessment_quality" else "0.2.0")
+    assert artifact.version == ("0.5.0" if task == "assessment_quality" else "0.3.0")
+    assert "Referenzfeedback" in artifact.text
+    assert "Beurteile" in artifact.text
+    if task == "assessment_quality":
+        assert "Gold-Segmentanalyse" in artifact.text
     assert "$packet_json" not in rendered
     assert len(digest) == 64
 

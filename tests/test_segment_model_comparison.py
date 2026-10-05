@@ -22,6 +22,15 @@ class FixedPredictor:
         return pd.DataFrame({"scope": [1, 1, 0], "SW": ["1", "1", "N"], "UA": ["0", "0", "N"], "HA": ["0", "0", "N"]})
 
 
+class DocumentAwarePredictor:
+    def __init__(self):
+        self.calls = []
+
+    def predict_frame(self, rows, *, gold_in_scope=False):
+        self.calls.append((rows["candidate_id"].tolist(), gold_in_scope))
+        return FixedPredictor().predict(rows["text"].tolist())
+
+
 def test_identical_models_use_identical_rows_and_metrics():
     comparison = compare_models(gold_rows(), {"ML": FixedPredictor(), "GBERT": FixedPredictor()})
     assert comparison["candidate_rows"] == 3
@@ -36,6 +45,21 @@ def test_identical_models_use_identical_rows_and_metrics():
     assert comparison["per_class"].query("task == 'SW_gold_scope' and `class` == '3'").support.eq(0).all()
 
 
+def test_document_aware_model_receives_complete_frame_for_both_scoring_modes():
+    predictor = DocumentAwarePredictor()
+
+    comparison = compare_models(
+        gold_rows(), {"ML": FixedPredictor(), "Gemini": predictor},
+    )
+
+    assert predictor.calls == [(["a", "b", "c"], False), (["a", "b", "c"], True)]
+    gemini_end_to_end = comparison["summary"].loc[
+        (comparison["summary"].model == "Gemini")
+        & (comparison["summary"].task == "SW_end_to_end")
+    ]
+    assert gemini_end_to_end["n"].item() == 3
+
+
 def test_missing_predictions_and_scope_mismatch_rejected():
     predictor = FixedPredictor()
     predictions = predictor.predict([])
@@ -47,6 +71,14 @@ def test_missing_predictions_and_scope_mismatch_rejected():
         score_predictions(gold_rows(), predictions, oracle)
     with pytest.raises(ValueError, match="held-out test"):
         compare_models(gold_rows().assign(split="dev"), {"ML": predictor, "GBERT": predictor})
+
+
+def test_end_to_end_scoring_does_not_invent_oracle_diagnostics():
+    metrics = score_predictions(gold_rows(), FixedPredictor().predict([]))
+    assert set(metrics["summary"].task) == {
+        "scope", "SW_end_to_end", "UA_end_to_end", "HA_end_to_end",
+    }
+    assert metrics["summary"]["n"].eq(3).all()
 
 
 def test_gbert_predictor_routes_unique_texts_and_expands_candidates():

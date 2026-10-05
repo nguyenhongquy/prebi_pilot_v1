@@ -42,6 +42,36 @@
       "variables": ["packet_json"]
     },
     {
+      "id": "assessment_quality_llm_judge",
+      "version": "0.4.0",
+      "task": "assessment_quality",
+      "modality": "llm_prompt",
+      "status": "development_draft",
+      "path": "assessment_quality/llm/0.4.0.md",
+      "sha256": "37165c1c5fad6003c005ca0a258d76fd5c4b0c46d45a355a0bcc7aaac8eba037",
+      "variables": ["packet_json"]
+    },
+    {
+      "id": "assessment_quality_llm_judge",
+      "version": "0.5.0",
+      "task": "assessment_quality",
+      "modality": "llm_prompt",
+      "status": "development_draft",
+      "path": "assessment_quality/llm/0.5.0.md",
+      "sha256": "cbec0ec318b33d8c4754bb0eee340f3f43f6e4d7f1000ed7698d09481eb399d7",
+      "variables": ["packet_json"]
+    },
+    {
+      "id": "feedback_quality_llm_judge",
+      "version": "0.3.0",
+      "task": "feedback_quality",
+      "modality": "llm_prompt",
+      "status": "development_draft",
+      "path": "feedback_quality/llm/0.3.0.md",
+      "sha256": "b31b86a73aee67c0b659e05a688986d4204f93da97ac1f38f2f18766e31434c6",
+      "variables": ["packet_json"]
+    },
+    {
       "id": "assessment_quality_human",
       "version": "0.2.0",
       "task": "assessment_quality",

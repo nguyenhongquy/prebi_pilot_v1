@@ -36,9 +36,25 @@ npm --prefix rating-ui run dev
 | 05    | [05_segment_evaluation.ipynb](05_segment_evaluation.ipynb)                     | Segment evaluation                                       |
 | 06    | [06_feedback_implied_score_pilot.ipynb](06_feedback_implied_score_pilot.ipynb) | Feedback-implied score pilot                             |
 | 07    | [07_rating_packet_export.ipynb](07_rating_packet_export.ipynb)                 | Local preflight and protected blinded-packet export      |
+| 08    | [08_llm_judge_pilot.ipynb](08_llm_judge_pilot.ipynb)                           | Protected LLM assessment/feedback quality judging       |
+| 09    | [09_llm_judge_analysis.ipynb](09_llm_judge_analysis.ipynb)                     | Descriptive judge-result and optional human comparison  |
+| 10    | [10_generation_consistency.ipynb](10_generation_consistency.ipynb)             | Independent G1/G2/G3 repetitions and categorical agreement |
 
 - Training, provider calls, and exports retain their explicit switches.
 - Segment evaluation can run after inference independently of generation.
+
+The generation-consistency notebook defaults to local preflight and no provider calls.
+It freezes five repetitions, the generation prompts/rubric, saved G2 GBERT analysis,
+and G3 observed human candidate annotations. Four playground and 18 test documents
+remain separate. Explicit approvals cover external processing, category encoding,
+and older G2 artifact provenance; test additionally requires a frozen-protocol gate.
+Fresh repetitions are interleaved, privately saved, and resumable without double-counting.
+Exact decimal-score categories are the default because existing generation returns decimal
+scores. Categorical rubric bands require a complete explicit mapping and rationale before
+generation; no automatic rounding is used. Reports include pairwise exact agreement,
+unanimous consistency, ordinal/nominal Krippendorff alpha, category frequencies, missing
+coverage, all-pairs cross-condition agreement, and exploratory paired author-cluster
+bootstrap contrasts. This is generation repeatability, not judge repeatability or correctness.
 
 The opening section of [05_segment_evaluation.ipynb](05_segment_evaluation.ipynb) compares TF-IDF ML with the saved direct GBERT cascade on the complete test split.
 Run Cells 1-5 independently of the optional saved-artifact workflow below them. In Cell 2, set `RUN_MODEL_COMPARISON=True` and either provide a trusted
@@ -71,7 +87,7 @@ Open a notebook in VS Code and select the workspace `.venv` Python kernel. Keep 
 
 Shared, non-secret experiment settings are in [config/experiment.toml](config/experiment.toml): data selectors and paths, classifier hyperparameters, generator model and repetitions, expected prompt/rubric versions, tracing preference, and evaluation seed. The notebooks load this file through `reflection_assessment_feedback.experiment_config`; persisted prediction and generation artifacts include its SHA-256 fingerprint. Keep API keys and `PREBI_DATA_ROOT` in the local `.env`, not in TOML. Runtime actions such as training, writing predictions, provider approval, and metric export remain explicit notebook switches.
 
-Versioned prompt artifacts and human coding protocols live under [prompts/](prompts/), indexed by [prompts/manifest.json](prompts/manifest.json). The active generation prompt is `generation@1.4.0`; its G2 predicted-analysis and G3 observed-human-analysis supplemental sections are separate versioned prompt fragments. Assessment-quality instruments are pinned to `0.3.0` and feedback-quality instruments to `0.2.0`, both using three-point quality ratings plus unable-to-judge. Assessment quality uses Score-Rubric Fit, Evidence Support, and Justification Quality. Feedback quality uses correctness and developmental usefulness. Feedback-implied coding remains raw scores 0.0-3.0 in tenths, with human guide `0.1.0` and LLM prompt `0.2.0`. All rating instruments are development drafts requiring calibration before confirmatory use. `reflection_assessment_feedback.prompt_registry` verifies artifact hashes and renders templates with exact variable checking. The rubric is a separate versioned instrument under [rubrics/](rubrics/), not prompt text. New generation runs store prompt-component, rubric-artifact, and fully rendered prompt hashes; rating records should likewise store the human-protocol or LLM-prompt version used.
+Versioned prompt artifacts and human coding protocols live under [prompts/](prompts/), indexed by [prompts/manifest.json](prompts/manifest.json). The active generation prompt is `generation@1.4.0`; its G2 predicted-analysis and G3 observed-human-analysis supplemental sections are separate versioned prompt fragments. Human assessment and feedback protocols remain pinned to assessment `0.3.0` and feedback `0.2.0`, with three-point ratings plus unable-to-judge. The German LLM-judge prompts are separately pinned to assessment `0.5.0` and feedback `0.3.0`. Both include matched teacher-educator feedback as an expert reference; the assessment judge also receives aggregate candidate-grain gold scope/band counts, missingness, review, and ambiguity summaries. These references inform judgments but are not treated as infallible gold labels or exact targets. Assessment criteria are Score-Rubric Fit, Evidence Support, and Justification Quality; feedback criteria are Correctness and Developmental Usefulness. Feedback-implied coding remains raw scores 0.0-3.0 in tenths, with human guide `0.1.0` and LLM prompt `0.2.0`. All rating instruments are development drafts requiring calibration before confirmatory use. `reflection_assessment_feedback.prompt_registry` verifies artifact hashes and renders templates with exact variable checking. The rubric is a separate versioned instrument under [rubrics/](rubrics/), not prompt text. New generation runs store prompt-component, rubric-artifact, and fully rendered prompt hashes; rating records likewise store prompt and input provenance.
 
 The feedback-implied score pilot entry point is [06_feedback_implied_score_pilot.ipynb](06_feedback_implied_score_pilot.ipynb), backed by `reflection_assessment_feedback.feedback_implied_scoring`. Its preflight is local-only; the LLM execution cell defaults to `APPROVE_EXTERNAL_PROCESSING = False`. The R1 pilot contains six documents and infers scores separately for SW, UA, and HA. It records `not_inferable` rather than forcing a score, validates evidence offsets against the human feedback, rate-limits provider calls, and writes run records only under protected `PREBI_DATA_ROOT`.
 
@@ -120,6 +136,8 @@ Open [01_segment_classification.ipynb](01_segment_classification.ipynb) and run 
 The current development cohort is all six R1 documents in the test split, selected through `config/experiment.toml`. [03_generate_g1_g3.ipynb](03_generate_g1_g3.ipynb) loads each document's candidate-grain human annotations, including review flags, alternatives, and missing values; it does not adjudicate or flatten them. G3 therefore represents generation with observed, imperfect human analysis, not an oracle condition. The notebook makes one G1 and one G3 Gemini request per document and stores a separate protected comparison artifact per document. Requests share a lock-based 7.5-second minimum interval. Provider processing is gated by `APPROVE_EXTERNAL_PROCESSING`; the approved exploratory batch has tracing enabled. Traces may contain full reflections, prompts, and outputs; configure the LangSmith credentials in `.env` and ensure project access and retention are approved.
 
 [02_segment_inference.ipynb](02_segment_inference.ipynb) runs the four local classifiers over the six R1 documents and saves one predicted-analysis artifact per document under `PREBI_DATA_ROOT/g2/predictions/`. [04_generate_g2.ipynb](04_generate_g2.ipynb) checks each artifact against the matching G1/G3 pair, then generates and persists one G2 run per document under `PREBI_DATA_ROOT/g2/demo-runs/`. The development batch used 18 Gemini generation requests total (six documents × three conditions) at one repetition, paced below the stated 10 RPM / 250 RPD free-tier limits. This is not a full-test-set or confirmatory batch; document 188 remains separately classified as exploratory.
+
+The judge workflow separates a playground from final test analysis. Playground mode selects all four test-split reflections by the author group of exploratory document 188; test mode excludes those four, leaving 18 reference-complete test reflections (the six R1 documents plus 12 others). The source split remains unchanged. Existing generation and feedback-judge artifacts are retained, while assessment prompt `0.5.0` is rejudged with aggregate candidate-grain gold-analysis summaries. The analysis notebook reports playground and test phases separately; never pool the playground author’s scores into final test summaries. The two test documents without teacher-feedback references remain outside the judge cohorts. Treat all results as descriptive pilot evidence, not confirmatory findings.
 
 ## Research Questions
 
@@ -366,8 +384,10 @@ For condition comparisons, first summarize repeated runs within each reflection,
 ### Multidimensional rating criteria
 
 Human raters and LLM judges use the same task-specific criteria and 3-point
-anchors. Assessment packets show reflection, rubric, and assessment only;
-feedback packets show reflection, rubric, and feedback only. Hide condition,
+anchors. Human packets show reflection, rubric, and the generated assessment or
+feedback. The LLM judge additionally sees the teacher-educator feedback for that
+reflection as an expert reference. The judge must consider it without treating
+it as infallible or requiring wording overlap. Both workflows hide condition,
 generator identity, intermediate analysis, and run metadata.
 
 | Task                | Criterion                | Main question                                                                 |

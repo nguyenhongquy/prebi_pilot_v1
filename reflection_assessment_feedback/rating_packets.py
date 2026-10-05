@@ -8,7 +8,14 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
 
-from reflection_assessment_feedback.experiment_config import load_experiment_config
+from reflection_assessment_feedback.experiment_config import (
+    experiment_config_sha256,
+    load_experiment_config,
+)
+from reflection_assessment_feedback.development_cohorts import (
+    REMAINING_TEST_COHORT,
+    load_remaining_test_feedback_cohort,
+)
 from reflection_assessment_feedback.prompt_registry import resolve_prompt
 from reflection_assessment_feedback.rubric_registry import resolve_rubric
 
@@ -261,29 +268,43 @@ def build_development_rating_packet_bundle(
         dtype={"document_id": str, "segment_id": str},
     )
     feedback_path = (project_root / config["paths"]["human_feedback"]).resolve()
-    feedback = pd.read_csv(
-        feedback_path,
-        usecols=["essay_name", "document_id", "feedback_text"],
-        dtype={"essay_name": str, "document_id": str},
-    )
-    feedback["essay_name"] = feedback["essay_name"].str.strip().str.upper()
-    feedback_by_document: dict[str, str] = {}
-    feedback_rows = feedback.loc[
-        feedback["essay_name"] == config["dataset"]["development_essay_name"]
-    ]
-    for document_id, document_feedback in feedback_rows.groupby("document_id"):
-        feedback_values = {
-            value.strip()
-            for value in document_feedback["feedback_text"].dropna().astype(str)
-            if value.strip()
-        }
-        if len(feedback_values) == 1:
-            feedback_by_document[str(document_id)] = feedback_values.pop()
-    r1_ids = sorted(
-        set(feedback_by_document) & set(rows["document_id"].dropna())
-    )
-    if len(r1_ids) != 6:
-        raise ValueError("Expected six R1 development documents for rating packet creation.")
+    cohort_id = config["dataset"].get("generation_cohort", "R1")
+    if cohort_id == REMAINING_TEST_COHORT:
+        cohort_feedback = load_remaining_test_feedback_cohort()
+        selected_document_ids = cohort_feedback["document_id"].astype(str).tolist()
+        feedback_by_document = dict(
+            zip(
+                cohort_feedback["document_id"].astype(str),
+                cohort_feedback["feedback_text"].astype(str),
+                strict=True,
+            )
+        )
+        expected_document_count = config["dataset"]["expected_generation_document_count"]
+    else:
+        feedback = pd.read_csv(
+            feedback_path,
+            usecols=["essay_name", "document_id", "feedback_text"],
+            dtype={"essay_name": str, "document_id": str},
+        )
+        feedback["essay_name"] = feedback["essay_name"].str.strip().str.upper()
+        feedback_by_document: dict[str, str] = {}
+        feedback_rows = feedback.loc[
+            feedback["essay_name"] == config["dataset"]["development_essay_name"]
+        ]
+        for document_id, document_feedback in feedback_rows.groupby("document_id"):
+            feedback_values = {
+                value.strip()
+                for value in document_feedback["feedback_text"].dropna().astype(str)
+                if value.strip()
+            }
+            if len(feedback_values) == 1:
+                feedback_by_document[str(document_id)] = feedback_values.pop()
+        selected_document_ids = sorted(
+            set(feedback_by_document) & set(rows["document_id"].dropna().astype(str))
+        )
+        expected_document_count = 6
+    if len(selected_document_ids) != expected_document_count:
+        raise ValueError("Selected cohort size differs from its expected rating-packet size.")
 
     comparison_dir = root / "g1-g3" / "demo-runs"
     g2_dir = root / "g2" / "demo-runs"
@@ -291,8 +312,9 @@ def build_development_rating_packet_bundle(
     for artifact_path in sorted(comparison_dir.glob("comparison-*.json")):
         artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
         if (
-            artifact.get("development_cohort") == "R1"
-            and artifact.get("document_id") in r1_ids
+            artifact.get("development_cohort") == cohort_id
+            and artifact.get("document_id") in selected_document_ids
+            and artifact.get("experiment_config_sha256") == experiment_config_sha256()
             and artifact.get("pairs")
         ):
             pair = artifact["pairs"][0]
@@ -308,8 +330,9 @@ def build_development_rating_packet_bundle(
         envelope = json.loads(artifact_path.read_text(encoding="utf-8"))
         run = envelope.get("run", {})
         if (
-            run.get("document_id") in r1_ids
+            run.get("document_id") in selected_document_ids
             and run.get("condition") == "G2"
+            and envelope.get("experiment_config_sha256") == experiment_config_sha256()
             and run.get("prompt_version") == config["generation"]["expected_prompt_version"]
             and run.get("rubric_version") == config["generation"]["expected_rubric_version"]
             and run.get("repetition") == config["generation"]["repetitions"]
@@ -318,7 +341,7 @@ def build_development_rating_packet_bundle(
 
     packets: list[dict[str, Any]] = []
     key_records: list[dict[str, Any]] = []
-    for document_id in r1_ids:
+    for document_id in selected_document_ids:
         if document_id not in comparisons or document_id not in g2_runs:
             raise FileNotFoundError("A development document is missing a matched G1/G2/G3 artifact.")
         document_rows = rows.loc[rows["document_id"] == document_id].copy()
@@ -376,7 +399,7 @@ def build_development_rating_packet_bundle(
         score_protocol_config["feedback_implied_score_human_version"],
     )
     score_packet_count = 0
-    for document_id in r1_ids:
+    for document_id in selected_document_ids:
         human_feedback = feedback_by_document[document_id]
         reflection_segments = [
             {
@@ -429,17 +452,19 @@ def build_development_rating_packet_bundle(
     packet_bundle = {"schema_version": "1.0.0", "packets": packets}
     condition_key = {
         "schema_version": "1.0.0",
-        "cohort": "R1-development",
+        "cohort": cohort_id,
         "records": key_records,
     }
-    if len(packets) != 42 or score_packet_count != 6:
-        raise ValueError("Expected 42 packets: 36 quality ratings and 6 feedback-implied score packets.")
+    expected_packet_count = expected_document_count * 7
+    if len(packets) != expected_packet_count or score_packet_count != expected_document_count:
+        raise ValueError("Rating packet count differs from the configured cohort size.")
     if write:
         output_dir = root / "rating-packets" / "development"
         output_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         os.chmod(output_dir, 0o700)
-        packet_path = output_dir / "r1-rating-packets.json"
-        key_path = output_dir / "r1-condition-key.json"
+        safe_cohort_name = cohort_id.lower().replace("_", "-")
+        packet_path = output_dir / f"{safe_cohort_name}-rating-packets.json"
+        key_path = output_dir / f"{safe_cohort_name}-condition-key.json"
         if packet_path.exists() or key_path.exists():
             raise FileExistsError("Refusing to overwrite existing rating packet exports.")
         for path, content in ((packet_path, packet_bundle), (key_path, condition_key)):

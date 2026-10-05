@@ -15,7 +15,7 @@ from reflection_assessment_feedback.data import TARGET_COLUMNS
 def score_predictions(
     gold: pd.DataFrame,
     predictions: pd.DataFrame,
-    gold_scope_predictions: pd.DataFrame,
+    gold_scope_predictions: pd.DataFrame | None = None,
 ) -> dict:
     if gold.empty or len(gold) != len(predictions):
         raise ValueError("Predictions must cover every gold candidate in the same order.")
@@ -23,7 +23,7 @@ def score_predictions(
     if not np.isin(scope, [0, 1]).all():
         raise ValueError("Gold scope must use known 0/1 labels.")
     in_scope = scope == 1
-    if len(gold_scope_predictions) != int(in_scope.sum()):
+    if gold_scope_predictions is not None and len(gold_scope_predictions) != int(in_scope.sum()):
         raise ValueError("Gold-scope predictions must cover all gold in-scope candidates.")
     if not predictions["scope"].isin([0, 1]).all():
         raise ValueError("Predicted scope must use 0/1 labels.")
@@ -62,10 +62,11 @@ def score_predictions(
             raise ValueError("In-scope predictions must use bands 0-3.")
         if not np.all(labels[~predicted_in_scope] == "N"):
             raise ValueError("Out-of-scope predictions must use N, not skill absence.")
-        oracle = gold_scope_predictions[dimension].to_numpy()
-        if not np.isin(oracle, ["0", "1", "2", "3"]).all():
-            raise ValueError("Gold-scope predictions must use bands 0-3.")
-        add_task(f"{dimension}_gold_scope", bands.astype(int).astype(str), oracle, ["0", "1", "2", "3"])
+        if gold_scope_predictions is not None:
+            oracle = gold_scope_predictions[dimension].to_numpy()
+            if not np.isin(oracle, ["0", "1", "2", "3"]).all():
+                raise ValueError("Gold-scope predictions must use bands 0-3.")
+            add_task(f"{dimension}_gold_scope", bands.astype(int).astype(str), oracle, ["0", "1", "2", "3"])
         expected = np.full(len(gold), "N", dtype=object)
         expected[in_scope] = bands.astype(int).astype(str)
         add_task(f"{dimension}_end_to_end", expected, labels, ["N", "0", "1", "2", "3"])
@@ -164,10 +165,17 @@ def compare_models(gold: pd.DataFrame, models: dict) -> dict:
     gold_mask = gold["scope_target"].eq(1)
     for name, model in models.items():
         started = perf_counter()
-        predictions = model.predict(gold["text"].tolist())
+        predict_frame = getattr(model, "predict_frame", None)
+        if callable(predict_frame):
+            predictions = predict_frame(gold)
+        else:
+            predictions = model.predict(gold["text"].tolist())
         elapsed = perf_counter() - started
         started = perf_counter()
-        oracle = model.predict(gold.loc[gold_mask, "text"].tolist(), gold_in_scope=True)
+        if callable(predict_frame):
+            oracle = predict_frame(gold, gold_in_scope=True).loc[gold_mask].reset_index(drop=True)
+        else:
+            oracle = model.predict(gold.loc[gold_mask, "text"].tolist(), gold_in_scope=True)
         oracle_elapsed = perf_counter() - started
         metrics = score_predictions(gold, predictions, oracle)
         summaries.append(metrics["summary"].assign(model=name))
