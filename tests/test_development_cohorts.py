@@ -3,7 +3,9 @@ from __future__ import annotations
 import csv
 
 import pytest
+import pandas as pd
 
+import reflection_assessment_feedback.development_cohorts as cohort_module
 from reflection_assessment_feedback.development_cohorts import (
     build_gold_segment_analysis_summary,
     load_author_document_group,
@@ -120,3 +122,43 @@ def test_author_group_selector_returns_all_test_documents_and_rejects_split_over
         writer.writerows(rows)
     with pytest.raises(ValueError, match="wholly contained in the test split"):
         load_author_document_group(path, "188")
+
+
+@pytest.mark.parametrize("missing_reference", [False, True])
+def test_remaining_cohort_excludes_author_not_essay_and_explicit_documents(tmp_path, monkeypatch, missing_reference):
+    split_directory = tmp_path / "splits"
+    split_directory.mkdir()
+    records = [
+        {"document_id": "188", "author_id": "development", "split": "test"},
+        {"document_id": "126", "author_id": "development", "split": "test"},
+        {"document_id": "200", "author_id": "other", "split": "test"},
+        {"document_id": "201", "author_id": "other", "split": "test"},
+        {"document_id": "218", "author_id": "excluded", "split": "test"},
+        {"document_id": "221", "author_id": "excluded", "split": "test"},
+    ]
+    pd.DataFrame(records).to_csv(split_directory / "provisional_split_manifest.csv", index=False)
+    pd.DataFrame(records).to_csv(split_directory / "provisional_test_modeling_wide.csv", index=False)
+    feedback = [
+        {"document_id": "188", "essay_name": "R4", "full_text": "development text", "feedback_text": "reference"},
+        {"document_id": "126", "essay_name": "R3", "full_text": "development text", "feedback_text": "reference"},
+        {"document_id": "200", "essay_name": "R1", "full_text": "retained R1 text", "feedback_text": "reference"},
+        {"document_id": "201", "essay_name": "R2", "full_text": "retained R2 text", "feedback_text": "" if missing_reference else "reference"},
+    ]
+    pd.DataFrame(feedback).to_csv(tmp_path / "feedback.csv", index=False)
+    config = {
+        "paths": {"provisional_split_directory": "splits", "human_feedback": "feedback.csv"},
+        "dataset": {
+            "generation_cohort": cohort_module.REMAINING_TEST_COHORT,
+            "prediction_split": "test", "exploratory_document_id": "188",
+            "generation_excluded_document_ids": ["218", "221"],
+            "expected_generation_document_count": 2,
+        },
+    }
+    monkeypatch.setattr(cohort_module, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(cohort_module, "load_experiment_config", lambda: config)
+    if missing_reference:
+        with pytest.raises(ValueError, match="201 lacks a unique complete teacher-reference"):
+            cohort_module.load_remaining_test_feedback_cohort()
+    else:
+        selected = cohort_module.load_remaining_test_feedback_cohort()
+        assert selected["document_id"].tolist() == ["200", "201"]

@@ -1,4 +1,4 @@
 split,modeling_candidate_rows,unique_modeling_segments,documents,authors,feedback_reflections,review_required_modeling_rows,unresolved_rows_excluded,unknown_skill_rows_excluded,text_quality_rows_excluded,text_quality_segments_excluded,text_quality_only_rows_excluded,total_rows_excluded,minimum_text_characters
-train,7107,7065,181,66,0,84,74,1368,250,190,250,1692,10
-dev,1823,1811,34,11,0,24,14,143,76,59,76,233,10
-test,905,903,24,8,22,4,10,188,38,30,38,236,10
+train,7124,7081,184,48,0,86,78,1321,289,217,289,1688,10
+dev,1806,1795,31,8,0,22,10,190,37,32,37,237,10
+test,905,903,24,6,22,4,10,188,38,30,38,236,10

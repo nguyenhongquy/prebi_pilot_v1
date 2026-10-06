@@ -26,9 +26,12 @@ def consistency_tables(
     units: pd.DataFrame,
     repetitions: int = 5,
     band_mapping: dict[str, str] | None = None,
+    conditions: tuple[str, ...] = ("G1", "G2", "G3"),
 ) -> dict[str, pd.DataFrame]:
     if repetitions < 2:
         raise ValueError("At least two repetitions are required.")
+    if len(conditions) < 2 or len(set(conditions)) != len(conditions) or any(not condition.strip() for condition in conditions):
+        raise ValueError("At least two unique condition names are required.")
     required = {"document_id", "condition", "dimension_id", "repetition", "score"}
     if not required.issubset(scores.columns):
         raise ValueError("Missing repetition score columns.")
@@ -38,7 +41,7 @@ def consistency_tables(
         raise ValueError("Unit identifiers and cohort labels must not be missing.")
     if scores.duplicated(["document_id", "condition", "dimension_id", "repetition"]).any():
         raise ValueError("Duplicate repetition ratings must not be counted twice.")
-    if not scores.condition.isin(["G1", "G2", "G3"]).all() or not scores.dimension_id.isin(["SW", "UA", "HA"]).all():
+    if not scores.condition.isin(conditions).all() or not scores.dimension_id.isin(["SW", "UA", "HA"]).all():
         raise ValueError("Unknown condition or dimension.")
     if not scores.repetition.isin(range(1, repetitions + 1)).all():
         raise ValueError("Repetition IDs must be within the frozen protocol.")
@@ -61,7 +64,7 @@ def consistency_tables(
         authors_by_document = dict(zip(cohort.document_id.tolist(), cohort.author_id.tolist(), strict=True))
         for dimension in ("SW", "UA", "HA"):
             tables = {}
-            for condition in ("G1", "G2", "G3"):
+            for condition in conditions:
                 subset = frame.loc[
                     frame["mode"].eq(mode) & frame.dimension_id.eq(dimension) & frame.condition.eq(condition)
                 ]
@@ -111,7 +114,7 @@ def consistency_tables(
                     "unanimous_rate": float(complete.nunique(axis=1).eq(1).mean()) if len(complete) else None,
                     **alpha_results,
                 })
-            for left, right in combinations(("G1", "G2", "G3"), 2):
+            for left, right in combinations(conditions, 2):
                 rates = []
                 for document_id in document_ids:
                     left_values = tables[left].loc[document_id].dropna().tolist()
@@ -130,7 +133,10 @@ def consistency_tables(
     }
 
 
-def paired_consistency_differences(details: pd.DataFrame, *, samples: int = 2000, seed: int = 20260929) -> pd.DataFrame:
+def paired_consistency_differences(
+    details: pd.DataFrame, *, samples: int = 2000, seed: int = 20260929,
+    contrasts: tuple[tuple[str, str], ...] = (("G1", "G2"), ("G1", "G3"), ("G2", "G3")),
+) -> pd.DataFrame:
     if samples < 1:
         raise ValueError("Bootstrap samples must be positive.")
     results = []
@@ -138,7 +144,7 @@ def paired_consistency_differences(details: pd.DataFrame, *, samples: int = 2000
     for (mode, dimension), subset in details.groupby(["mode", "dimension_id"]):
         complete = subset.loc[subset["complete"]]
         table = complete.pivot(index=["document_id", "author_id"], columns="condition", values="pairwise_exact")
-        for left, right in (("G1", "G2"), ("G1", "G3"), ("G2", "G3")):
+        for left, right in contrasts:
             if left not in table or right not in table:
                 continue
             paired = table[[left, right]].dropna()

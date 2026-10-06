@@ -3,7 +3,7 @@ experiment_name = "reflection-assessment-feedback"
 
 [paths]
 provisional_split_directory = "data/provisional_segment_splits"
-classifier_checkpoints = "artifacts/segment-classification/retrain-20261003T125604532027Z" 
+classifier_checkpoints = "artifacts/segment-classification/retrain-20261006T072742859011Z"
 human_feedback = "../prebi_ap4_v1/rl1_reflection_analytics/data/raw/human_feedback/testset_human_feedback_by_essay.csv"
 
 [dataset]
@@ -14,7 +14,8 @@ exploratory_essay_name = "R4"
 exploratory_essay_record_index = 0
 development_essay_name = "R1"
 generation_cohort = "remaining-test-reference-complete-v1"
-expected_generation_document_count = 16
+generation_excluded_document_ids = ["218", "221"]
+expected_generation_document_count = 18
 
 [labels]
 [labels.skill_targets]

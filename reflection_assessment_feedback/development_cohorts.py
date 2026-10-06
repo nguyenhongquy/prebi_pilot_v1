@@ -149,23 +149,29 @@ def load_remaining_test_feedback_cohort() -> pd.DataFrame:
     feedback["full_text"] = feedback["full_text"].fillna("").astype(str).str.strip()
     feedback["feedback_text"] = feedback["feedback_text"].fillna("").astype(str).str.strip()
 
-    r1_document_ids = set(
-        feedback.loc[
-            feedback["essay_name"] == dataset_config["development_essay_name"],
-            "document_id",
-        ]
+    development_documents = load_author_document_group(
+        split_path.parent / "provisional_split_manifest.csv",
+        str(dataset_config["exploratory_document_id"]),
+    )
+    excluded_document_ids = {
+        str(document_id) for document_id in dataset_config["generation_excluded_document_ids"]
+    }
+    selected_document_ids = (
+        split_ids - set(development_documents["document_id"]) - excluded_document_ids
     )
     candidate_rows = feedback.loc[
-        feedback["document_id"].isin(split_ids)
-        & ~feedback["document_id"].isin(r1_document_ids)
+        feedback["document_id"].isin(selected_document_ids)
     ].copy()
 
     eligible_records: list[dict[str, Any]] = []
-    for document_id, rows in candidate_rows.groupby("document_id", sort=True):
+    for document_id in sorted(selected_document_ids):
+        rows = candidate_rows.loc[candidate_rows["document_id"].eq(document_id)]
         full_texts = {value for value in rows["full_text"] if value}
         feedback_texts = {value for value in rows["feedback_text"] if value}
         if len(rows) != 1 or len(full_texts) != 1 or len(feedback_texts) != 1:
-            continue
+            raise ValueError(
+                f"Selected document {document_id} lacks a unique complete teacher-reference record."
+            )
         eligible_records.append(rows.iloc[0].to_dict())
 
     expected_count = dataset_config.get("expected_generation_document_count")

@@ -68,4 +68,24 @@ Splits are deterministic with seed `20260929`. Author and document groups are ke
 
 To regenerate, run `data/1.3_dataset_preparation.ipynb` from the project environment. The notebook expects the private cohort file at `data/private/feedback_cohort/feedback_available.csv` with columns `document_id` and `feedback_available`.
 
+The canonical views were regenerated on 2026-10-06 using normalized author
+identities: 62 authors across 239 documents, with 48/8/6 authors in train/dev/test.
+Every modeling segment has at least 10 characters after trimming whitespace.
+`author_disjoint_provenance.json` records the export hashes and backup location.
+The older generic `*_wide.csv` and `*_long.csv` files were not regenerated and
+must not be used with the corrected author IDs.
+
+Retraining uses the existing notebook settings through
+[scripts/retrain_author_disjoint_classifiers.py](../../scripts/retrain_author_disjoint_classifiers.py):
+
+```sh
+.venv/bin/python scripts/retrain_author_disjoint_classifiers.py --model ml
+.venv/bin/python scripts/retrain_author_disjoint_classifiers.py --model gbert
+```
+
+Model selection uses dev only; test evaluation follows selection. ML models are
+saved under protected `PREBI_DATA_ROOT` storage. GBERT uses a fresh checkpoint
+directory; completed heads can be reused with `--resume-directory` only when
+their split fingerprints match. Existing checkpoints are not overwritten.
+
 These files contain segment text and stable project identifiers. Treat them as controlled research data and follow the repository's data access and release rules. The split manifest also reveals feedback availability; do not publish it without review.

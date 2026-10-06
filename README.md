@@ -133,11 +133,56 @@ Open [01_segment_classification.ipynb](01_segment_classification.ipynb) and run 
 
 ### 2. G1/G3 generation demo
 
-The current development cohort is all six R1 documents in the test split, selected through `config/experiment.toml`. [03_generate_g1_g3.ipynb](03_generate_g1_g3.ipynb) loads each document's candidate-grain human annotations, including review flags, alternatives, and missing values; it does not adjudicate or flatten them. G3 therefore represents generation with observed, imperfect human analysis, not an oracle condition. The notebook makes one G1 and one G3 Gemini request per document and stores a separate protected comparison artifact per document. Requests share a lock-based 7.5-second minimum interval. Provider processing is gated by `APPROVE_EXTERNAL_PROCESSING`; the approved exploratory batch has tracing enabled. Traces may contain full reflections, prompts, and outputs; configure the LangSmith credentials in `.env` and ensure project access and retention are approved.
+The current generation cohort contains 18 reference-complete test documents, selected through `config/experiment.toml`: exclude all documents by the author of document 188 and explicitly exclude documents 218 and 221. Selection is not based on essay name. [03_generate_g1_g3.ipynb](03_generate_g1_g3.ipynb) loads each document's candidate-grain human annotations, including review flags, alternatives, and missing values; it does not adjudicate or flatten them. G3 therefore represents generation with observed, imperfect human analysis, not an oracle condition. The notebook makes one G1 and one G3 Gemini request per document and stores a separate protected comparison artifact per document. Requests share a lock-based 7.5-second minimum interval. Provider processing is gated by `APPROVE_EXTERNAL_PROCESSING`; approved batches use tracing. Traces may contain full reflections, prompts, and outputs; configure the LangSmith credentials in `.env` and ensure project access and retention are approved.
 
-[02_segment_inference.ipynb](02_segment_inference.ipynb) runs the four local classifiers over the six R1 documents and saves one predicted-analysis artifact per document under `PREBI_DATA_ROOT/g2/predictions/`. [04_generate_g2.ipynb](04_generate_g2.ipynb) checks each artifact against the matching G1/G3 pair, then generates and persists one G2 run per document under `PREBI_DATA_ROOT/g2/demo-runs/`. The development batch used 18 Gemini generation requests total (six documents × three conditions) at one repetition, paced below the stated 10 RPM / 250 RPD free-tier limits. This is not a full-test-set or confirmatory batch; document 188 remains separately classified as exploratory.
+[02_segment_inference.ipynb](02_segment_inference.ipynb) runs the four local classifiers over the configured generation cohort and saves one predicted-analysis artifact per document under `PREBI_DATA_ROOT/g2/predictions/`. [04_generate_g2.ipynb](04_generate_g2.ipynb) checks each artifact against the matching G1/G3 pair, then generates and persists one G2 run per document under `PREBI_DATA_ROOT/g2/demo-runs/`. The historical R1 development batch used 18 Gemini generation requests total (six documents × three conditions) at one repetition. It is distinct from the current author-excluded cohort and is not a confirmatory batch.
 
-The judge workflow separates a playground from final test analysis. Playground mode selects all four test-split reflections by the author group of exploratory document 188; test mode excludes those four, leaving 18 reference-complete test reflections (the six R1 documents plus 12 others). The source split remains unchanged. Existing generation and feedback-judge artifacts are retained, while assessment prompt `0.5.0` is rejudged with aggregate candidate-grain gold-analysis summaries. The analysis notebook reports playground and test phases separately; never pool the playground author’s scores into final test summaries. The two test documents without teacher-feedback references remain outside the judge cohorts. Treat all results as descriptive pilot evidence, not confirmatory findings.
+For G2-only evaluation using the new author-disjoint direct GBERT run, use
+[scripts/evaluate_g2_direct_gbert.py](scripts/evaluate_g2_direct_gbert.py):
+
+```sh
+.venv/bin/python scripts/evaluate_g2_direct_gbert.py --phase prepare
+.venv/bin/python scripts/evaluate_g2_direct_gbert.py --phase all --approve-external-processing
+```
+
+The local prepare phase validates checkpoints and split hashes and predicts all
+18 documents. The approved external phase generates G2 with the configured
+Gemini model, then judges assessment and feedback quality with the configured
+OpenAI model. This G2-only batch does not regenerate G1/G3. Predictions, generated
+outputs, blinded packets, and ratings are isolated under
+`PREBI_DATA_ROOT/g2/author-disjoint-evaluation/`, keyed by input provenance; reruns
+reuse validated completed records. Aggregate scores are written under
+`artifacts/g2-author-disjoint-judge/`. Invalid evidence IDs or judge outputs are
+retried up to three times and otherwise fail; they are never accepted silently.
+
+For five-repeat consistency of the new direct-GBERT G2 predictions against the
+frozen historical G1/G2/G3 outputs, use
+[scripts/rerun_g2_generation_consistency.py](scripts/rerun_g2_generation_consistency.py):
+
+```sh
+.venv/bin/python scripts/rerun_g2_generation_consistency.py --phase prepare
+.venv/bin/python scripts/rerun_g2_generation_consistency.py --phase generate --approve-external-processing
+.venv/bin/python scripts/rerun_g2_generation_consistency.py --phase analyze
+```
+
+This separate protocol uses the same 18 author-excluded test reflections and
+exact-decimal score policy as the historical consistency experiment. It validates
+and reuses 270 historical test generations, then generates 90 fresh G2 outputs
+(five per reflection). The single-output judge batch is not counted as a repeat.
+The historical conditions and new G2 remain four distinct variants. Source inputs
+and repeat outputs stay under protected
+`PREBI_DATA_ROOT/generation-consistency-g2-author-disjoint/`; aggregate metrics
+are exported under `artifacts/g2-generation-consistency/`.
+
+[10_generation_consistency.ipynb](10_generation_consistency.ipynb) contains a
+standalone new-G2 comparison section with pairwise exact agreement, unanimous
+agreement, nominal/ordinal Krippendorff alpha, and exploratory author-cluster
+bootstrap differences. The analysis uses corrected author IDs and withholds
+complete comparisons until every reflection has five valid repetitions.
+Repeatability does not establish assessment accuracy or feedback quality;
+historical baselines also differ in generation date, so comparisons are descriptive.
+
+The judge workflow separates a playground from final test analysis. Playground mode selects the four test-split reflections by the author group of exploratory document 188: documents 3, 64, 126, and 188. Excluding this author from the 24-document classifier test set leaves 20 documents; explicitly excluding documents 218 and 221, which lack teacher-feedback records, leaves 18 reference-complete test reflections. Other authors' R1 reflections remain eligible. The source split remains unchanged. Existing generation and judge artifacts are retained. Assessment prompt `0.5.0` uses aggregate candidate-grain gold-analysis summaries. Never pool the playground author's scores into final test summaries. Missing or ambiguous teacher-reference records in the selected cohort cause an explicit error rather than silently shrinking the cohort. Treat all results as descriptive pilot evidence, not confirmatory findings.
 
 ## Research Questions
 

@@ -1,0 +1,43 @@
+{
+  "run_id": "author-disjoint-20261006T072213941686Z",
+  "author_normalization": "document-matching-normalization-v1",
+  "canonical_authors": 62,
+  "documents": 239,
+  "minimum_text_characters": 10,
+  "split_summary": {
+    "train": {
+      "candidate_rows": 7124,
+      "documents": 184,
+      "authors": 48
+    },
+    "dev": {
+      "candidate_rows": 1806,
+      "documents": 31,
+      "authors": 8
+    },
+    "test": {
+      "candidate_rows": 905,
+      "documents": 24,
+      "authors": 6
+    }
+  },
+  "split_sha256": {
+    "provisional_unresolved_scope_candidates.csv": "b861a07a240e18a260c3e137f92675e36cd25fef0daac8625adc3fdd47771a29",
+    "provisional_split_summary.csv": "93551c66b38d6694e2d2772bfa48f5233452de8fff600898b9e13a4f0523a883",
+    "provisional_split_manifest.csv": "7e82e7130ad6ad1b4eda218e612a21e3ea014105c080e75ffb498fd37a7d0e5f",
+    "provisional_dev_modeling_wide.csv": "3e95458822a27120ea2447ab9ee74868b859a146a1e301e02f9eb6bbb2bc90d9",
+    "provisional_train_modeling_long.csv": "9b3f52f06f9cd388e55f7f1b5ed8ba6492a66ae30beb0eba37d9842b0cb08e7e",
+    "provisional_train_scope.csv": "67d422e985194a1af056ebcdd397f16c1d51e47a693bdc7c7024d4a2e60aa869",
+    "provisional_test_modeling_long.csv": "312cff47ccf232c89c508cb1e5c3c3ed04cbb88802efd18f62ed61eaad697456",
+    "provisional_split_label_summary.csv": "853c7509b0f799729ef8b9eb0ac8e4cdb2f8c17d3b88b47c31fb7cca2e9cc714",
+    "provisional_test_scope.csv": "e4248444b13676699ff79b77629864cf0231391278b5e0cd08e191b64ded25fa",
+    "provisional_dev_modeling_long.csv": "fbcf80a812d04085bde7aa28c772385c858ec379342c4b2db1f1231c0aeb46b6",
+    "provisional_train_modeling_wide.csv": "0217cfd55db4613467144ce8dd7eba7c051198cb681276c4b6ed217bc8ec7b85",
+    "provisional_test_modeling_wide.csv": "355be4793524c57c155c51aaa927f804d909f166c416e2a115af18cbeae4e651",
+    "provisional_text_quality_candidates.csv": "f049db69e23ab477a79d58182b1c65218d931e467f14ed7b08c3d736ab5ac55c",
+    "provisional_dev_scope.csv": "5a5f6f9d457b64b9cdd9bb6f6e9071bbb69b36a8e013efa40311d4fff7ad4fc2",
+    "provisional_unknown_skill_candidates.csv": "9a84585b9ef651d78604f430ebd18ab9c70e5727fee1e628d2ecc7ddb12bdae3",
+    "provisional_text_quality_summary.csv": "59e5c128852c1ba87aef4301a1486668709f367d8b3f163ca0a4890c7cbc006a"
+  },
+  "backup_directory": "/Users/quynguyen/Documents/CodingProjects/prebi_ap4_v1/rl1_reflection_analytics/data/private/author_disjoint_backups/author-disjoint-20261006T072213941686Z"
+}

@@ -13,6 +13,27 @@
 			],
 			"isBackground": true,
 			"problemMatcher": []
+		},
+		{
+			"label": "Retrain author-disjoint GBERT classifiers",
+			"type": "shell",
+			"command": "set -o pipefail && /Users/quynguyen/Documents/CodingProjects/prebi_v1/.venv/bin/python -u scripts/retrain_author_disjoint_classifiers.py --model gbert --resume-directory artifacts/segment-classification/retrain-20261006T072742859011Z 2>&1 | tee artifacts/author-disjoint-retraining/gbert-20261006.log",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Evaluate G2 with author-disjoint direct GBERT",
+			"type": "shell",
+			"command": "set -o pipefail && .venv/bin/python -u scripts/evaluate_g2_direct_gbert.py --phase all --approve-external-processing 2>&1 | tee artifacts/author-disjoint-retraining/g2-direct-judge-20261006.log",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Rerun new G2 generation consistency",
+			"type": "shell",
+			"command": "set -o pipefail && .venv/bin/python -u scripts/rerun_g2_generation_consistency.py --phase generate --approve-external-processing 2>&1 | tee artifacts/author-disjoint-retraining/g2-consistency-20261006.log",
+			"isBackground": false,
+			"problemMatcher": []
 		}
 	]
 }
