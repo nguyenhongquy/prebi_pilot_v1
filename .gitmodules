@@ -1,0 +1,3 @@
+[submodule "rating-ui"]
+	path = rating-ui
+	url = https://github.com/nguyenhongquy/prebi-rating-ui.git

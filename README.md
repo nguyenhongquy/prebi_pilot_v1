@@ -11,11 +11,18 @@ The intervention is **analysis-mediated generation**: for each predefined segmen
 
 ## Human Rating UI
 
-The standalone browser app lives in [rating-ui/](rating-ui/). It opens directly to the three rating tasks and does not require the other repository's workbench,
-a Python API, or a model provider.
+The standalone browser app lives in [rating-ui/](rating-ui/) as a Git submodule of
+the public [prebi-rating-ui repository](https://github.com/nguyenhongquy/prebi-rating-ui).
+This research repository pins an exact UI commit. The app opens to expert
+onboarding and does not require the other repository's workbench, a Python API,
+or a model provider. Node.js 22.12 or newer is required.
+
+Clone this repository with `git clone --recurse-submodules`, or initialize the
+submodule in an existing clone before installing dependencies:
 
 ```bash
-npm --prefix rating-ui install
+git submodule update --init --recursive
+npm --prefix rating-ui ci
 npm --prefix rating-ui run dev
 ```
 
@@ -23,6 +30,18 @@ npm --prefix rating-ui run dev
 2. Upload only blinded packet JSON, never the protected condition key.
 3. Drafts and submitted ratings stay in browser-local storage; download results for protected collection.
 4. See [rating-ui/README.md](rating-ui/README.md) for build and data-handling details.
+
+For UI development, work inside the submodule on a branch (for example,
+`git -C rating-ui switch main`), then commit and push UI changes to its public
+repository. Record the new UI revision in this research repository with
+`git add rating-ui` and a parent-repository commit. After pulling research
+repository updates, run `git submodule update --init --recursive` to check out
+the pinned UI revision. Pushing UI commits to its `main` branch triggers GitHub
+Pages deployment independently of this private repository.
+
+Research packets, condition keys, credentials, and rating exports must remain
+outside the public submodule. Use this submodule as the authoritative UI working
+copy rather than maintaining a second independent copy.
 
 ## Running the Notebooks
 
