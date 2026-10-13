@@ -21,7 +21,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from reflection_assessment_feedback import EXPERT_RUBRIC, IntermediateAnalysis, make_generation_request
-from reflection_assessment_feedback.development_cohorts import build_gold_segment_analysis_summary
+from reflection_assessment_feedback.development_cohorts import (
+    build_gold_segment_analysis_summary,
+    load_playground_feedback_cohort,
+)
 from reflection_assessment_feedback.experiment_config import experiment_config_sha256, load_experiment_config
 from reflection_assessment_feedback.generator import RubricGenerationRunner
 from reflection_assessment_feedback.llm_judge import judge_input_sha256, run_quality_judge
@@ -59,7 +62,9 @@ def save_private(path: Path, value: Any) -> None:
         staged.unlink(missing_ok=True)
 
 
-def prepare() -> tuple[dict, dict, Path, dict]:
+def prepare(cohort: str = "remaining-test") -> tuple[dict, dict, Path, dict]:
+    if cohort not in {"playground", "remaining-test"}:
+        raise ValueError("Cohort must be 'playground' or 'remaining-test'.")
     config = load_experiment_config()
     protected = Path(os.environ["PREBI_DATA_ROOT"]).expanduser().resolve()
     if protected == PROJECT_ROOT or PROJECT_ROOT in protected.parents:
@@ -84,9 +89,19 @@ def prepare() -> tuple[dict, dict, Path, dict]:
         if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
             raise ValueError("Training split fingerprint mismatch")
     notebook = json.loads((PROJECT_ROOT / "02_segment_inference.ipynb").read_text())
-    namespace: dict[str, Any] = {"__name__": "__g2_direct_evaluation__"}
+    namespace: dict[str, Any] = {
+        "__name__": "__g2_direct_evaluation__",
+        "INFERENCE_COHORT": cohort,
+    }
     for index in (1, 3, 5):
         exec(compile("".join(notebook["cells"][index]["source"]), f"inference:cell-{index}", "exec"), namespace)
+    expected_ids = set(
+        load_playground_feedback_cohort()["document_id"].astype(str)
+        if cohort == "playground"
+        else namespace["COHORT_RECORDS"]["document_id"].astype(str)
+    )
+    if set(namespace["DEVELOPMENT_DOCUMENT_IDS"]) != expected_ids:
+        raise ValueError("Inference notebook documents differ from the requested author-disjoint cohort.")
     prompts = {
         task: resolve_prompt(config["prompts"][f"{task}_llm_id"], config["prompts"][f"{task}_llm_version"]).sha256
         for task in ("assessment_quality", "feedback_quality")
@@ -97,14 +112,20 @@ def prepare() -> tuple[dict, dict, Path, dict]:
         "test_split_sha256": split_hash, "canonical_authors": 62,
         "experiment_config_sha256": experiment_config_sha256(),
         "document_ids": sorted(namespace["DEVELOPMENT_DOCUMENT_IDS"]),
-        "cohort_rule": {
-            "excluded_author_document_id": str(config["dataset"]["exploratory_document_id"]),
-            "excluded_document_ids": config["dataset"]["generation_excluded_document_ids"],
-        },
+        "cohort_rule": (
+            {"playground_author_document_id": str(config["dataset"]["exploratory_document_id"])}
+            if cohort == "playground"
+            else {
+                "excluded_author_document_id": str(config["dataset"]["exploratory_document_id"]),
+                "excluded_document_ids": config["dataset"]["generation_excluded_document_ids"],
+            }
+        ),
         "teacher_reference_sha256": fingerprint(namespace["COHORT_RECORDS"][["document_id", "feedback_text"]].to_dict(orient="records")),
         "judge_prompt_sha256": prompts,
         "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
     }
+    if cohort == "playground":
+        provenance["langsmith_tracing"] = False
     batch = protected / "g2/author-disjoint-evaluation" / fingerprint(provenance)
     batch.mkdir(parents=True, exist_ok=True, mode=0o700)
     if not (batch / "provenance.json").exists():
@@ -135,11 +156,15 @@ def prepare() -> tuple[dict, dict, Path, dict]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--phase", choices=("prepare", "generate", "judge", "all"), default="prepare")
+    parser.add_argument("--cohort", choices=("playground", "remaining-test"), default="remaining-test")
     parser.add_argument("--approve-external-processing", action="store_true")
     args = parser.parse_args()
     os.chdir(PROJECT_ROOT)
     load_dotenv(PROJECT_ROOT / ".env", override=False)
-    namespace, config, batch, provenance = prepare()
+    if args.cohort == "playground":
+        for variable in ("LANGSMITH_TRACING", "LANGCHAIN_TRACING_V2", "LANGCHAIN_TRACING"):
+            os.environ[variable] = "false"
+    namespace, config, batch, provenance = prepare(args.cohort)
     if args.phase == "prepare":
         print("Predictions validated; no generation or judge provider calls made.", flush=True)
         return
@@ -149,16 +174,26 @@ def main() -> None:
     judge = config["llm_judge"]
     if generation["provider"] != "google" or judge["provider"] != "openai":
         raise ValueError("This runner requires configured Google generation and OpenAI judging")
-    if not (os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")) or not os.getenv("OPENAI_API_KEY"):
-        raise ValueError("Approved generation and judge credentials are required")
+    if args.phase in {"generate", "all"} and not (os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")):
+        raise ValueError("Approved generation requires Google generation credentials")
+    if args.phase in {"judge", "all"} and not os.getenv("OPENAI_API_KEY"):
+        raise ValueError("Approved judging requires OpenAI credentials")
     protected = batch.parents[2]
-    from langchain_google_genai import ChatGoogleGenerativeAI
-    from langchain_openai import ChatOpenAI
-    generator = RubricGenerationRunner(
-        ChatGoogleGenerativeAI(model=generation["model_name"], temperature=generation["temperature"]),
-        enable_langsmith_tracing=generation["enable_langsmith_tracing"],
-    )
-    judge_model = ChatOpenAI(model=judge["model_name"])
+    generator = None
+    judge_model = None
+    if args.phase in {"generate", "all"}:
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        generator = RubricGenerationRunner(
+            ChatGoogleGenerativeAI(model=generation["model_name"], temperature=generation["temperature"]),
+            enable_langsmith_tracing=provenance.get(
+                "langsmith_tracing", generation["enable_langsmith_tracing"]
+            ),
+        )
+    if args.phase in {"judge", "all"}:
+        from langchain_openai import ChatOpenAI
+
+        judge_model = ChatOpenAI(model=judge["model_name"])
     ratings = []
     expected = len(provenance["document_ids"]) * generation["repetitions"] * 2
     for number, document_id in enumerate(provenance["document_ids"], start=1):

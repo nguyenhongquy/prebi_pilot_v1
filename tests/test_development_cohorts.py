@@ -9,6 +9,7 @@ import reflection_assessment_feedback.development_cohorts as cohort_module
 from reflection_assessment_feedback.development_cohorts import (
     build_gold_segment_analysis_summary,
     load_author_document_group,
+    load_playground_feedback_cohort,
 )
 
 
@@ -122,6 +123,65 @@ def test_author_group_selector_returns_all_test_documents_and_rejects_split_over
         writer.writerows(rows)
     with pytest.raises(ValueError, match="wholly contained in the test split"):
         load_author_document_group(path, "188")
+
+
+def test_playground_feedback_cohort_uses_all_documents_by_target_author(tmp_path, monkeypatch) -> None:
+    split_directory = tmp_path / "splits"
+    split_directory.mkdir()
+    pd.DataFrame(
+        [
+            {"document_id": "188", "author_id": "author-x", "split": "test"},
+            {"document_id": "189", "author_id": "author-x", "split": "test"},
+            {"document_id": "200", "author_id": "author-y", "split": "test"},
+        ]
+    ).to_csv(split_directory / "provisional_split_manifest.csv", index=False)
+    pd.DataFrame(
+        [
+            {"document_id": "188", "feedback_text": "Feedback 188"},
+            {"document_id": "189", "feedback_text": "Feedback 189"},
+            {"document_id": "200", "feedback_text": "Feedback 200"},
+        ]
+    ).to_csv(tmp_path / "feedback.csv", index=False)
+    config = {
+        "paths": {
+            "provisional_split_directory": "splits",
+            "human_feedback": "feedback.csv",
+        },
+        "dataset": {"exploratory_document_id": "188"},
+    }
+    monkeypatch.setattr(cohort_module, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(cohort_module, "load_experiment_config", lambda: config)
+
+    cohort = load_playground_feedback_cohort()
+
+    assert cohort["document_id"].tolist() == ["188", "189"]
+    assert cohort["feedback_text"].tolist() == ["Feedback 188", "Feedback 189"]
+
+
+def test_playground_feedback_cohort_rejects_duplicate_reference_rows(tmp_path, monkeypatch) -> None:
+    split_directory = tmp_path / "splits"
+    split_directory.mkdir()
+    pd.DataFrame(
+        [{"document_id": "188", "author_id": "author-x", "split": "test"}]
+    ).to_csv(split_directory / "provisional_split_manifest.csv", index=False)
+    pd.DataFrame(
+        [
+            {"document_id": "188", "feedback_text": "Feedback 188"},
+            {"document_id": "188", "feedback_text": "Feedback 188"},
+        ]
+    ).to_csv(tmp_path / "feedback.csv", index=False)
+    config = {
+        "paths": {
+            "provisional_split_directory": "splits",
+            "human_feedback": "feedback.csv",
+        },
+        "dataset": {"exploratory_document_id": "188"},
+    }
+    monkeypatch.setattr(cohort_module, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(cohort_module, "load_experiment_config", lambda: config)
+
+    with pytest.raises(ValueError, match="unique complete teacher-reference"):
+        load_playground_feedback_cohort()
 
 
 @pytest.mark.parametrize("missing_reference", [False, True])

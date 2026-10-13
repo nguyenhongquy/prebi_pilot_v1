@@ -9,12 +9,12 @@ evidence, not confirmatory findings. Only aggregate research statistics are show
 
 These views have different inclusion rules and must not be treated as one denominator.
 
-| Data view | Documents | Authors | Segments / candidate rows |
-| --- | ---: | ---: | --- |
-| Full source-document registry | 242 | 64 canonical authors | Not a segment-level modeling dataset |
-| Historical full annotation audit | 239 | 63 trim/case-folded author names | 11,625 segments |
-| Current author-disjoint modeling splits | 239 | 62 canonical authors | 9,779 unique segments; 9,835 candidate rows |
-| Generation / judge test slice | 18 | 5 canonical authors | 699 unique ordered segments |
+| Data view                               | Documents |                          Authors | Segments / candidate rows                   |
+| --------------------------------------- | --------: | -------------------------------: | ------------------------------------------- |
+| Full source-document registry           |       242 |             64 canonical authors | Not a segment-level modeling dataset        |
+| Historical full annotation audit        |       239 | 63 trim/case-folded author names | 11,625 segments                             |
+| Current author-disjoint modeling splits |       239 |             62 canonical authors | 9,779 unique segments; 9,835 candidate rows |
+| Generation / judge test slice           |        18 |              5 canonical authors | 699 unique ordered segments                 |
 
 The historical 63-author count used whitespace trimming and case folding. The
 current pipeline also removes filename extensions and collapses whitespace,
@@ -34,12 +34,12 @@ train/dev/test. All candidates belonging to an underlying segment stay together.
 Candidate rows preserve alternative annotation bundles; they are not independent
 new text segments. Long modeling views contain three dimension rows per candidate.
 
-| Split | Authors | Documents | Unique segments | Candidate rows | Feedback-available documents | Review-required candidate rows |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Train | 48 | 184 | 7,081 | 7,124 | 0 | 86 |
-| Dev | 8 | 31 | 1,795 | 1,806 | 0 | 22 |
-| Test | 6 | 24 | 903 | 905 | 22 | 4 |
-| **Total** | **62** | **239** | **9,779** | **9,835** | **22** | **112** |
+| Split           |      Authors |     Documents | Unique segments |  Candidate rows | Feedback-available documents | Review-required candidate rows |
+| --------------- | -----------: | ------------: | --------------: | --------------: | ---------------------------: | -----------------------------: |
+| Train           |           48 |           184 |           7,081 |           7,124 |                            0 |                             86 |
+| Dev             |            8 |            31 |           1,795 |           1,806 |                            0 |                             22 |
+| Test            |            6 |            24 |             903 |             905 |                           22 |                              4 |
+| **Total** | **62** | **239** | **9,779** | **9,835** |                 **22** |                  **112** |
 
 ### Eligibility and Exclusions
 
@@ -50,12 +50,12 @@ and scope views and is used when balancing train/dev groups. Excluded candidates
 remain in separate audit artifacts. Unresolved scope and unknown in-scope skill
 labels are excluded from the common modeling view.
 
-| Split | Unresolved-scope rows excluded | Unknown-skill rows excluded | Text-quality rows excluded | Text-quality segments excluded | Total candidate rows excluded |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Train | 78 | 1,321 | 289 | 217 | 1,688 |
-| Dev | 10 | 190 | 37 | 32 | 237 |
-| Test | 10 | 188 | 38 | 30 | 236 |
-| **Total** | **98** | **1,699** | **364** | **279** | **2,161** |
+| Split           | Unresolved-scope rows excluded | Unknown-skill rows excluded | Text-quality rows excluded | Text-quality segments excluded | Total candidate rows excluded |
+| --------------- | -----------------------------: | --------------------------: | -------------------------: | -----------------------------: | ----------------------------: |
+| Train           |                             78 |                       1,321 |                        289 |                            217 |                         1,688 |
+| Dev             |                             10 |                         190 |                         37 |                             32 |                           237 |
+| Test            |                             10 |                         188 |                         38 |                             30 |                           236 |
+| **Total** |                   **98** |             **1,699** |              **364** |                  **279** |               **2,161** |
 
 Exclusion reasons can overlap; the total counts each candidate once. The prepared
 input has **11,996 candidates across 11,805 underlying segments**; 9,835 retained
@@ -66,12 +66,12 @@ are distinct from the mutually accounted modeling/exclusion summaries above.
 
 ### Scope Label Counts
 
-| Split | Out of scope (0) | In scope (1) | Total |
-| --- | ---: | ---: | ---: |
-| Train | 343 | 6,781 | 7,124 |
-| Dev | 83 | 1,723 | 1,806 |
-| Test | 31 | 874 | 905 |
-| **Total** | **457** | **9,378** | **9,835** |
+| Split           | Out of scope (0) |    In scope (1) |           Total |
+| --------------- | ---------------: | --------------: | --------------: |
+| Train           |              343 |           6,781 |           7,124 |
+| Dev             |               83 |           1,723 |           1,806 |
+| Test            |               31 |             874 |             905 |
+| **Total** |    **457** | **9,378** | **9,835** |
 
 ### In-Scope Skill Label Counts
 
@@ -79,17 +79,17 @@ Each in-scope candidate has all three skill targets. `0` means the skill is
 absent; `1` corresponds to original Stufe I/II, `2` to Stufe III, and `3` to
 Stufe IV/V. Out-of-scope rows have non-applicable skill labels, not skill negatives.
 
-| Split | Skill | 0 | 1 | 2 | 3 |
-| --- | --- | ---: | ---: | ---: | ---: |
-| Train | Situationserfassung (SW) | 4,029 | 2,256 | 475 | 21 |
-| Train | Analyse (UA) | 3,819 | 1,989 | 636 | 337 |
-| Train | Konsequenzen (HA) | 5,714 | 700 | 328 | 39 |
-| Dev | SW | 1,017 | 565 | 136 | 5 |
-| Dev | UA | 982 | 465 | 198 | 78 |
-| Dev | HA | 1,447 | 197 | 70 | 9 |
-| Test | SW | 480 | 314 | 80 | 0 |
-| Test | UA | 533 | 216 | 97 | 28 |
-| Test | HA | 735 | 81 | 50 | 8 |
+| Split | Skill                    |     0 |     1 |   2 |   3 |
+| ----- | ------------------------ | ----: | ----: | --: | --: |
+| Train | Situationserfassung (SW) | 4,029 | 2,256 | 475 |  21 |
+| Train | Analyse (UA)             | 3,819 | 1,989 | 636 | 337 |
+| Train | Konsequenzen (HA)        | 5,714 |   700 | 328 |  39 |
+| Dev   | SW                       | 1,017 |   565 | 136 |   5 |
+| Dev   | UA                       |   982 |   465 | 198 |  78 |
+| Dev   | HA                       | 1,447 |   197 |  70 |   9 |
+| Test  | SW                       |   480 |   314 |  80 |   0 |
+| Test  | UA                       |   533 |   216 |  97 |  28 |
+| Test  | HA                       |   735 |    81 |  50 |   8 |
 
 Labels are strongly imbalanced. In particular, test SW has no class-3 examples;
 a fixed-label macro-F1 that includes this class differs from a supported-label
@@ -101,25 +101,25 @@ These statistics describe the historical **11,625-segment** audit, not the
 current 9,779-segment modeling view or the 11,805-segment prepared candidate input.
 The different exports should not be conflated into a single filtering flow.
 
-| Statistic | Value |
-| --- | ---: |
-| Documents | 239 |
-| Authors under historical trim/case-fold normalization | 63 |
-| Segments | 11,625 |
-| Seminars / semesters | 2 / 5 |
-| Segments per document, median [IQR] | 47 [31-64] |
-| Words per segment, median [IQR] | 18 [12-24] |
-| Annotators, creator/editor union | 6 |
-| Segments with one annotation creator | 10,694 (91.99%) |
-| Segments with more than one annotation creator | 931 (8.01%) |
-| Reflection-related segments | 11,164 (96.03%) |
-| Non-reflection-related segments | 461 (3.97%) |
+| Statistic                                             |           Value |
+| ----------------------------------------------------- | --------------: |
+| Documents                                             |             239 |
+| Authors under historical trim/case-fold normalization |              63 |
+| Segments                                              |          11,625 |
+| Seminars / semesters                                  |           2 / 5 |
+| Segments per document, median [IQR]                   |      47 [31-64] |
+| Words per segment, median [IQR]                       |      18 [12-24] |
+| Annotators, creator/editor union                      |               6 |
+| Segments with one annotation creator                  | 10,694 (91.99%) |
+| Segments with more than one annotation creator        |     931 (8.01%) |
+| Reflection-related segments                           | 11,164 (96.03%) |
+| Non-reflection-related segments                       |     461 (3.97%) |
 
-| Distinct annotation creators per segment | Segments | Share |
-| --- | ---: | ---: |
-| 1 | 10,694 | 91.99% |
-| 2 | 927 | 7.97% |
-| 3 | 4 | 0.03% |
+| Distinct annotation creators per segment | Segments |  Share |
+| ---------------------------------------- | -------: | -----: |
+| 1                                        |   10,694 | 91.99% |
+| 2                                        |      927 |  7.97% |
+| 3                                        |        4 |  0.03% |
 
 Creator counts describe annotation provenance, not inter-rater agreement. The
 six-annotator count also includes editors. Annotation effort is uneven: the two
@@ -166,23 +166,23 @@ rejudged for this comparison. The partial earlier 16-document batch is not poole
 
 Scale: **1-3**, larger is better. Every cell below uses 18 scorable document ratings.
 
-| Task / criterion | Historical G1 | Historical G2 | New G2 | Historical G3 |
-| --- | ---: | ---: | ---: | ---: |
-| Assessment: score-rubric fit | 2.556 | 2.333 | 2.333 | 2.611 |
-| Assessment: evidence support | 2.667 | 2.389 | 2.556 | 2.611 |
-| Assessment: justification quality | 2.000 | 2.000 | 2.000 | 2.000 |
-| Feedback: correctness | 2.444 | 2.333 | 2.667 | 2.722 |
-| Feedback: developmental usefulness | 2.000 | 2.056 | 2.000 | 2.000 |
+| Task / criterion                   | Historical G1 | Historical G2 | New G2 | Historical G3 |
+| ---------------------------------- | ------------: | ------------: | -----: | ------------: |
+| Assessment: score-rubric fit       |         2.556 |         2.333 |  2.333 |    **2.611** |
+| Assessment: evidence support       |    **2.667** |         2.389 |  2.556 |         2.611 |
+| Assessment: justification quality  |         2.000 |         2.000 |  2.000 |         2.000 |
+| Feedback: correctness              |         2.444 |         2.333 |  2.667 |    **2.722** |
+| Feedback: developmental usefulness |         2.000 |         2.056 |  2.000 |         2.000 |
 
 ### Paired New-G2 Changes Against Historical G2
 
-| Criterion | Mean difference | Improved / unchanged / worsened documents |
-| --- | ---: | --- |
-| Score-rubric fit | 0.000 | 2 / 14 / 2 |
-| Evidence support | +0.167 | 6 / 9 / 3 |
-| Justification quality | 0.000 | 0 / 18 / 0 |
-| Correctness | +0.333 | 6 / 12 / 0 |
-| Developmental usefulness | -0.056 | 0 / 17 / 1 |
+| Criterion                | Mean difference | Improved / unchanged / worsened documents |
+| ------------------------ | --------------: | ----------------------------------------- |
+| Score-rubric fit         |           0.000 | 2 / 14 / 2                                |
+| Evidence support         |          +0.167 | 6 / 9 / 3                                 |
+| Justification quality    |           0.000 | 0 / 18 / 0                                |
+| Correctness              |          +0.333 | 6 / 12 / 0                                |
+| Developmental usefulness |          -0.056 | 0 / 17 / 1                                |
 
 These are ordinal-score descriptives, not significance tests. Regeneration and
 judge variability prevent attribution of every change solely to author-disjoint
@@ -207,42 +207,42 @@ nominal alpha is primary for the exact-category policy, ordinal alpha supplement
 ### Pairwise Exact Agreement
 
 | Dimension | Historical G1 | Historical G2 | New G2 | Historical G3 |
-| --- | ---: | ---: | ---: | ---: |
-| SW | 0.7944 | 0.6111 | 0.5556 | 0.8056 |
-| UA | 0.5333 | 0.3556 | 0.4222 | 0.3500 |
-| HA | 0.5056 | 0.3667 | 0.3722 | 0.4278 |
+| --------- | ------------: | ------------: | -----: | ------------: |
+| SW        |        0.7944 |        0.6111 | 0.5556 |   **0.8056** |
+| UA        |   **0.5333** |        0.3556 | 0.4222 |        0.3500 |
+| HA        |   **0.5056** |        0.3667 | 0.3722 |        0.4278 |
 
 ### Unanimous Agreement Rate
 
 | Dimension | Historical G1 | Historical G2 | New G2 | Historical G3 |
-| --- | ---: | ---: | ---: | ---: |
-| SW | 0.6667 | 0.2778 | 0.3333 | 0.6111 |
-| UA | 0.1111 | 0.0556 | 0.1667 | 0.0000 |
-| HA | 0.2222 | 0.0556 | 0.0556 | 0.1111 |
+| --------- | ------------: | ------------: | -----: | ------------: |
+| SW        |        0.6667 |        0.2778 | 0.3333 |        0.6111 |
+| UA        |        0.1111 |        0.0556 | 0.1667 |        0.0000 |
+| HA        |        0.2222 |        0.0556 | 0.0556 |        0.1111 |
 
 ### Nominal Krippendorff Alpha
 
 | Dimension | Historical G1 | Historical G2 | New G2 | Historical G3 |
-| --- | ---: | ---: | ---: | ---: |
-| SW | 0.7058 | 0.5384 | 0.4645 | 0.7110 |
-| UA | 0.3938 | 0.2670 | 0.3432 | 0.1997 |
-| HA | 0.3643 | 0.2887 | 0.3102 | 0.3267 |
+| --------- | ------------: | ------------: | -----: | ------------: |
+| SW        |        0.7058 |        0.5384 | 0.4645 |        0.7110 |
+| UA        |        0.3938 |        0.2670 | 0.3432 |        0.1997 |
+| HA        |        0.3643 |        0.2887 | 0.3102 |        0.3267 |
 
 ### Ordinal Krippendorff Alpha
 
-| Dimension | Historical G1 | Historical G2 | New G2 | Historical G3 |
-| --- | ---: | ---: | ---: | ---: |
-| SW | 0.9461 | 0.9086 | 0.8503 | 0.8866 |
-| UA | 0.8695 | 0.8227 | 0.8883 | 0.7078 |
-| HA | 0.8519 | 0.7767 | 0.8616 | 0.8849 |
+| Dimension | Historical G1 | Historical G2 |      New G2 | Historical G3 |
+| --------- | ------------: | ------------: | ----------: | ------------: |
+| SW        |   **0.9461** |        0.9086 |      0.8503 |        0.8866 |
+| UA        |        0.8695 |        0.8227 | **0.8883** |        0.7078 |
+| HA        |        0.8519 |        0.7767 |      0.8616 |   **0.8849** |
 
 ### Paired Repeatability Differences: New G2 Minus Historical G2
 
 | Dimension | Exact-agreement difference | Exploratory 95% bootstrap interval |
-| --- | ---: | --- |
-| SW | -0.0556 | [-0.2316, 0.1333] |
-| UA | +0.0667 | [-0.0737, 0.2579] |
-| HA | +0.0056 | [-0.1889, 0.2118] |
+| --------- | -------------------------: | ---------------------------------- |
+| SW        |                    -0.0556 | [-0.2316, 0.1333]                  |
+| UA        |                    +0.0667 | [-0.0737, 0.2579]                  |
+| HA        |                    +0.0056 | [-0.1889, 0.2118]                  |
 
 Intervals use **five corrected author clusters**, 2,000 bootstrap samples, and
 seed 20260929. All three intervals include zero. With few clusters and historical

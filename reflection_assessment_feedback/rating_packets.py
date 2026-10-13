@@ -14,12 +14,15 @@ from reflection_assessment_feedback.experiment_config import (
 )
 from reflection_assessment_feedback.development_cohorts import (
     REMAINING_TEST_COHORT,
+    load_playground_feedback_cohort,
     load_remaining_test_feedback_cohort,
 )
 from reflection_assessment_feedback.prompt_registry import resolve_prompt
 from reflection_assessment_feedback.rubric_registry import resolve_rubric
 
 RatingTask = Literal["assessment_quality", "feedback_quality"]
+PLAYGROUND_PACKET_COHORT = "playground-author-188-v1"
+REMAINING_TEST_PACKET_COHORT = "remaining-test-author-disjoint-g2-v1"
 
 LEGACY_RATING_CRITERIA: dict[str, list[dict[str, str]]] = {
     "assessment_quality": [
@@ -239,9 +242,165 @@ def build_rating_packet(
     return packet
 
 
+def _select_packet_cohort(
+    cohort: Literal["playground", "remaining-test"],
+    *,
+    config: dict[str, Any],
+) -> tuple[str, list[str], dict[str, str]]:
+    if cohort == "playground":
+        cohort_feedback = load_playground_feedback_cohort()
+        selected_document_ids = cohort_feedback["document_id"].astype(str).tolist()
+        selected_feedback = dict(
+            zip(
+                selected_document_ids,
+                cohort_feedback["feedback_text"].astype(str),
+                strict=True,
+            )
+        )
+        return PLAYGROUND_PACKET_COHORT, selected_document_ids, selected_feedback
+
+    cohort_feedback = load_remaining_test_feedback_cohort()
+    selected_document_ids = cohort_feedback["document_id"].astype(str).tolist()
+    feedback_by_document = dict(
+        zip(
+            selected_document_ids,
+            cohort_feedback["feedback_text"].astype(str),
+            strict=True,
+        )
+    )
+    return REMAINING_TEST_PACKET_COHORT, selected_document_ids, feedback_by_document
+
+
+def _artifact_fingerprint(value: Any) -> str:
+    serialized = json.dumps(value, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _load_author_disjoint_g2_runs(
+    protected_root: Path,
+    *,
+    cohort: Literal["playground", "remaining-test"],
+    document_ids: list[str],
+    config: dict[str, Any],
+    project_root: Path,
+    rubric_sha256: str,
+) -> dict[str, tuple[Path, dict[str, Any]]]:
+    checkpoint_directory = project_root / config["paths"]["classifier_checkpoints"]
+    checkpoint_manifest = json.loads((checkpoint_directory / "run-manifest.json").read_text())
+    expected_rule = (
+        {"playground_author_document_id": str(config["dataset"]["exploratory_document_id"])}
+        if cohort == "playground"
+        else {
+            "excluded_author_document_id": str(config["dataset"]["exploratory_document_id"]),
+            "excluded_document_ids": config["dataset"]["generation_excluded_document_ids"],
+        }
+    )
+    expected_ids = set(document_ids)
+    matching_batches: list[tuple[Path, dict[str, Any]]] = []
+    for provenance_path in sorted(
+        (protected_root / "g2" / "author-disjoint-evaluation").glob("*/provenance.json")
+    ):
+        provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+        if (
+            set(map(str, provenance.get("document_ids", []))) == expected_ids
+            and provenance.get("cohort_rule") == expected_rule
+            and provenance.get("training_run_id") == checkpoint_directory.name
+            and provenance.get("classifier_architecture") == "direct"
+            and provenance.get("classifier_backend") == "gbert"
+            and provenance.get("canonical_authors") == 62
+            and provenance.get("experiment_config_sha256") == experiment_config_sha256()
+            and (cohort != "playground" or provenance.get("langsmith_tracing") is False)
+        ):
+            batch = provenance_path.parent
+            complete = all(
+                (batch / "predictions" / f"document-{document_id}.json").is_file()
+                and (
+                    batch
+                    / "generation"
+                    / f"document-{document_id}-rep-{config['generation']['repetitions']}.json"
+                ).is_file()
+                for document_id in document_ids
+            )
+            if complete:
+                matching_batches.append((batch, provenance))
+    if len(matching_batches) != 1:
+        raise FileNotFoundError(
+            f"Expected one complete current author-disjoint G2 batch for {cohort}; found {len(matching_batches)}."
+        )
+
+    batch, provenance = matching_batches[0]
+    direct_model_names = (
+        "scope",
+        "direct-situationserfassung",
+        "direct-analyse",
+        "direct-konsequenzen",
+    )
+    for model_name in direct_model_names:
+        model_record = checkpoint_manifest["models"][model_name]
+        checkpoint_path = checkpoint_directory / f"{model_name}.pt"
+        if (
+            model_name not in provenance["checkpoint_sha256"]
+            or hashlib.sha256(checkpoint_path.read_bytes()).hexdigest()
+            != provenance["checkpoint_sha256"][model_name]
+            or provenance["checkpoint_sha256"][model_name]
+            != model_record["checkpoint_sha256"]
+        ):
+            raise ValueError("Author-disjoint G2 checkpoint provenance is invalid.")
+    for split_name, expected_hash in checkpoint_manifest["split_sha256"].items():
+        split, view = split_name.split("_", 1)
+        split_path = (
+            project_root
+            / config["paths"]["provisional_split_directory"]
+            / f"provisional_{split}_{view}.csv"
+        )
+        if hashlib.sha256(split_path.read_bytes()).hexdigest() != expected_hash:
+            raise ValueError("Author-disjoint G2 split provenance is invalid.")
+
+    generation_prompt = resolve_prompt(
+        config["generation"]["prompt_id"],
+        config["generation"]["expected_prompt_version"],
+    )
+    runs: dict[str, tuple[Path, dict[str, Any]]] = {}
+    for document_id in document_ids:
+        prediction_path = batch / "predictions" / f"document-{document_id}.json"
+        if not prediction_path.is_file():
+            raise FileNotFoundError("Author-disjoint G2 prediction is missing from its batch.")
+        prediction = json.loads(prediction_path.read_text(encoding="utf-8"))
+        if any(prediction.get(key) != value for key, value in provenance.items()):
+            raise ValueError("Author-disjoint G2 prediction has mismatched batch provenance.")
+
+        generation_path = (
+            batch
+            / "generation"
+            / f"document-{document_id}-rep-{config['generation']['repetitions']}.json"
+        )
+        if not generation_path.is_file():
+            raise FileNotFoundError("Author-disjoint G2 generation is incomplete for the selected cohort.")
+        envelope = json.loads(generation_path.read_text(encoding="utf-8"))
+        run = envelope.get("run", {})
+        if (
+            envelope.get("provenance") != provenance
+            or envelope.get("document_id") != document_id
+            or envelope.get("prediction_sha256") != _artifact_fingerprint(prediction)
+            or run.get("document_id", envelope["document_id"]) != document_id
+            or run.get("condition") != "G2"
+            or run.get("model_name") != config["generation"]["model_name"]
+            or run.get("prompt_version") != generation_prompt.version
+            or run.get("prompt_artifact_sha256") != generation_prompt.sha256
+            or run.get("rubric_artifact_sha256") != rubric_sha256
+            or run.get("repetition") != config["generation"]["repetitions"]
+            or run.get("generation_parameters")
+            != {"temperature": config["generation"]["temperature"]}
+        ):
+            raise ValueError("Author-disjoint G2 generation provenance or configuration is invalid.")
+        runs[document_id] = (generation_path, run)
+    return runs
+
+
 def build_development_rating_packet_bundle(
     protected_root: str | Path,
     *,
+    cohort: Literal["playground", "remaining-test"] = "remaining-test",
     write: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     config = load_experiment_config()
@@ -268,83 +427,64 @@ def build_development_rating_packet_bundle(
         dtype={"document_id": str, "segment_id": str},
     )
     feedback_path = (project_root / config["paths"]["human_feedback"]).resolve()
-    cohort_id = config["dataset"].get("generation_cohort", "R1")
-    if cohort_id == REMAINING_TEST_COHORT:
-        cohort_feedback = load_remaining_test_feedback_cohort()
-        selected_document_ids = cohort_feedback["document_id"].astype(str).tolist()
-        feedback_by_document = dict(
-            zip(
-                cohort_feedback["document_id"].astype(str),
-                cohort_feedback["feedback_text"].astype(str),
-                strict=True,
-            )
-        )
-        expected_document_count = config["dataset"]["expected_generation_document_count"]
-    else:
-        feedback = pd.read_csv(
-            feedback_path,
-            usecols=["essay_name", "document_id", "feedback_text"],
-            dtype={"essay_name": str, "document_id": str},
-        )
-        feedback["essay_name"] = feedback["essay_name"].str.strip().str.upper()
-        feedback_by_document: dict[str, str] = {}
-        feedback_rows = feedback.loc[
-            feedback["essay_name"] == config["dataset"]["development_essay_name"]
-        ]
-        for document_id, document_feedback in feedback_rows.groupby("document_id"):
-            feedback_values = {
-                value.strip()
-                for value in document_feedback["feedback_text"].dropna().astype(str)
-                if value.strip()
-            }
-            if len(feedback_values) == 1:
-                feedback_by_document[str(document_id)] = feedback_values.pop()
-        selected_document_ids = sorted(
-            set(feedback_by_document) & set(rows["document_id"].dropna().astype(str))
-        )
-        expected_document_count = 6
-    if len(selected_document_ids) != expected_document_count:
-        raise ValueError("Selected cohort size differs from its expected rating-packet size.")
+    cohort_id, selected_document_ids, feedback_by_document = _select_packet_cohort(
+        cohort,
+        config=config,
+    )
+    if not selected_document_ids or len(set(selected_document_ids)) != len(selected_document_ids):
+        raise ValueError("Selected rating cohort is empty or contains duplicate document IDs.")
+    if not set(selected_document_ids).issubset(set(rows["document_id"].dropna().astype(str))):
+        raise ValueError("A selected rating document is missing from the configured test split.")
 
     comparison_dir = root / "g1-g3" / "demo-runs"
-    g2_dir = root / "g2" / "demo-runs"
-    comparisons: dict[str, tuple[Path, dict[str, Any]]] = {}
+    comparison_candidates: dict[str, list[tuple[Path, dict[str, Any]]]] = {}
     for artifact_path in sorted(comparison_dir.glob("comparison-*.json")):
         artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
         if (
-            artifact.get("development_cohort") == cohort_id
-            and artifact.get("document_id") in selected_document_ids
-            and artifact.get("experiment_config_sha256") == experiment_config_sha256()
+            str(artifact.get("document_id")) in selected_document_ids
+            and artifact.get("rubric_id") == config["generation"]["rubric_id"]
+            and artifact.get("rubric_version") == config["generation"]["expected_rubric_version"]
             and artifact.get("pairs")
         ):
             pair = artifact["pairs"][0]
             runs = [pair.get("G1", {}), pair.get("G3", {})]
             if all(
-                run.get("prompt_version") == config["generation"]["expected_prompt_version"]
+                run.get("condition") in {"G1", "G3"}
+                and run.get("model_name") == config["generation"]["model_name"]
+                and run.get("prompt_version") == config["generation"]["expected_prompt_version"]
                 and run.get("repetition") == config["generation"]["repetitions"]
+                and run.get("generation_parameters")
+                == {"temperature": config["generation"]["temperature"]}
                 for run in runs
             ):
-                comparisons[artifact["document_id"]] = (artifact_path, artifact)
-    g2_runs: dict[str, tuple[Path, dict[str, Any]]] = {}
-    for artifact_path in sorted(g2_dir.glob("g2-run-*.json")):
-        envelope = json.loads(artifact_path.read_text(encoding="utf-8"))
-        run = envelope.get("run", {})
-        if (
-            run.get("document_id") in selected_document_ids
-            and run.get("condition") == "G2"
-            and envelope.get("experiment_config_sha256") == experiment_config_sha256()
-            and run.get("prompt_version") == config["generation"]["expected_prompt_version"]
-            and run.get("rubric_version") == config["generation"]["expected_rubric_version"]
-            and run.get("repetition") == config["generation"]["repetitions"]
-        ):
-            g2_runs[run["document_id"]] = (artifact_path, envelope)
+                comparison_candidates.setdefault(str(artifact["document_id"]), []).append(
+                    (artifact_path, artifact)
+                )
+    if set(comparison_candidates) != set(selected_document_ids):
+        raise FileNotFoundError("A selected document lacks a compatible G1/G3 comparison artifact.")
+    author_disjoint_runs = _load_author_disjoint_g2_runs(
+        root,
+        cohort=cohort,
+        document_ids=selected_document_ids,
+        config=config,
+        project_root=project_root,
+        rubric_sha256=rubric_entry.sha256,
+    )
+
+    matched_artifacts: dict[str, tuple[Path, dict[str, Any], Path, dict[str, Any]]] = {}
+    for document_id in selected_document_ids:
+        comparison_path, comparison = max(
+            comparison_candidates[document_id], key=lambda candidate: candidate[0].name
+        )
+        g2_path, g2_run = author_disjoint_runs[document_id]
+        matched_artifacts[document_id] = (comparison_path, comparison, g2_path, g2_run)
 
     packets: list[dict[str, Any]] = []
     key_records: list[dict[str, Any]] = []
     for document_id in selected_document_ids:
-        if document_id not in comparisons or document_id not in g2_runs:
-            raise FileNotFoundError("A development document is missing a matched G1/G2/G3 artifact.")
         document_rows = rows.loc[rows["document_id"] == document_id].copy()
+        if document_rows.empty:
+            raise ValueError(f"Selected rating document {document_id} has no reflection segments.")
         consistency = document_rows.groupby("segment_id").agg(
             text_variants=("text", "nunique"),
             order_variants=("segment_order", "nunique"),
@@ -360,12 +500,11 @@ def build_development_rating_packet_bundle(
             }
             for row in document_rows.itertuples(index=False)
         ]
-        comparison_path, comparison = comparisons[document_id]
+        comparison_path, comparison, g2_path, g2_envelope = matched_artifacts[document_id]
         pair = comparison["pairs"][0]
-        g2_path, g2_envelope = g2_runs[document_id]
         run_records = {
             "G1": pair["G1"],
-            "G2": g2_envelope["run"],
+            "G2": g2_run,
             "G3": pair["G3"],
         }
         for condition, run in run_records.items():
@@ -455,8 +594,8 @@ def build_development_rating_packet_bundle(
         "cohort": cohort_id,
         "records": key_records,
     }
-    expected_packet_count = expected_document_count * 7
-    if len(packets) != expected_packet_count or score_packet_count != expected_document_count:
+    expected_packet_count = len(selected_document_ids) * 7
+    if len(packets) != expected_packet_count or score_packet_count != len(selected_document_ids):
         raise ValueError("Rating packet count differs from the configured cohort size.")
     if write:
         output_dir = root / "rating-packets" / "development"

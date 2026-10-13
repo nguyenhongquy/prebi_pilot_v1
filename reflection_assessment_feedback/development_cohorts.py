@@ -119,6 +119,39 @@ def load_author_document_group(
     return author_documents.sort_values("document_id").reset_index(drop=True)
 
 
+def load_playground_feedback_cohort() -> pd.DataFrame:
+    config = load_experiment_config()
+    split_directory = PROJECT_ROOT / config["paths"]["provisional_split_directory"]
+    split_manifest = split_directory / "provisional_split_manifest.csv"
+    feedback_path = (PROJECT_ROOT / config["paths"]["human_feedback"]).resolve()
+    if not split_manifest.is_file() or not feedback_path.is_file():
+        raise FileNotFoundError("The configured test manifest or teacher-feedback source is unavailable.")
+
+    author_documents = load_author_document_group(
+        split_manifest,
+        str(config["dataset"]["exploratory_document_id"]),
+    )
+    document_ids = author_documents["document_id"].astype(str).tolist()
+    feedback = pd.read_csv(
+        feedback_path,
+        usecols=["document_id", "feedback_text"],
+        dtype={"document_id": str, "feedback_text": str},
+    )
+    feedback["document_id"] = feedback["document_id"].fillna("").str.strip()
+    feedback["feedback_text"] = feedback["feedback_text"].fillna("").astype(str).str.strip()
+
+    records: list[dict[str, str]] = []
+    for document_id in document_ids:
+        rows = feedback.loc[feedback["document_id"].eq(document_id)]
+        feedback_values = set(rows["feedback_text"]) - {""}
+        if len(rows) != 1 or len(feedback_values) != 1:
+            raise ValueError(
+                f"Playground document {document_id} lacks a unique complete teacher-reference record."
+            )
+        records.append({"document_id": document_id, "feedback_text": feedback_values.pop()})
+    return pd.DataFrame.from_records(records).sort_values("document_id").reset_index(drop=True)
+
+
 def load_remaining_test_feedback_cohort() -> pd.DataFrame:
     config = load_experiment_config()
     dataset_config = config["dataset"]
