@@ -3,6 +3,36 @@
   "artifacts": [
     {
       "id": "assessment_quality_human",
+      "version": "0.4.0",
+      "task": "assessment_quality",
+      "modality": "human_protocol",
+      "status": "development_draft",
+      "path": "assessment_quality/human/0.4.0.md",
+      "sha256": "82dec990d2db7789a4d39624e2c82d5198a614978970c798f4ee75bb957eaec1",
+      "variables": []
+    },
+    {
+      "id": "feedback_quality_human",
+      "version": "0.3.0",
+      "task": "feedback_quality",
+      "modality": "human_protocol",
+      "status": "development_draft",
+      "path": "feedback_quality/human/0.3.0.md",
+      "sha256": "fd28fbb3842e1ade8a8edab2917fca12fa368322bb3ed38f35377583ce7a2a67",
+      "variables": []
+    },
+    {
+      "id": "reflection_reference_score_human",
+      "version": "0.1.0",
+      "task": "reflection_reference_score",
+      "modality": "human_protocol",
+      "status": "development_draft",
+      "path": "reflection_reference_score/human/0.1.0.md",
+      "sha256": "87c6fc509c4f70f6bc05fedcb7b88e5cd2ebb652d4305247469147c3944ecf5e",
+      "variables": []
+    },
+    {
+      "id": "assessment_quality_human",
       "version": "0.3.0",
       "task": "assessment_quality",
       "modality": "human_protocol",

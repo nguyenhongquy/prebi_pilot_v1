@@ -1,9 +1,17 @@
 from __future__ import annotations
 
 import pytest
+import pandas as pd
 
+import reflection_assessment_feedback.rating_packets as rating_packets_module
 from reflection_assessment_feedback.experiment_config import load_experiment_config
-from reflection_assessment_feedback.rating_packets import build_rating_packet
+from reflection_assessment_feedback.rating_packets import (
+    build_rating_packet,
+    build_reference_rating_packet,
+    build_segment_annotation_summary,
+    build_segment_modelling_annotations,
+    make_reflection_id,
+)
 from reflection_assessment_feedback.prompt_registry import resolve_prompt, render_prompt
 from reflection_assessment_feedback.rubric import RUBRIC_ARTIFACT
 
@@ -52,6 +60,7 @@ def test_assessment_and_feedback_packets_are_blinded_and_task_specific() -> None
         run=_run(),
         reflection_segments=_segments(),
         rubric=rubric,
+        human_feedback="Synthetic historical lecturer feedback.",
     )
 
     for packet in (assessment_packet, feedback_packet):
@@ -71,27 +80,179 @@ def test_assessment_and_feedback_packets_are_blinded_and_task_specific() -> None
     ]
     assert feedback_packet["task"] == "feedback_quality"
     assert feedback_packet["protocol_id"] == config["feedback_quality_human_id"]
+    assert feedback_packet["human_feedback"] == "Synthetic historical lecturer feedback."
     assert feedback_packet["output"]["strengths"][0]["text"] == "Synthetic strength."
     for packet in (assessment_packet, feedback_packet):
-        assert packet["protocol_version"] == config[f"{packet['task']}_human_version"]
         assert packet["scale"]["min"] == 1
         assert packet["scale"]["max"] == 3
         for criterion in packet["criteria"]:
             assert set(criterion["anchors"]) == {"1", "2", "3"}
+        assert any(character in packet["human_protocol"] for character in "äöüÄÖÜ")
+    assert [criterion["label"] for criterion in feedback_packet["criteria"]] == [
+        "Korrektheit", "Entwicklungsnutzen"
+    ]
     assert [criterion["criterion_id"] for criterion in feedback_packet["criteria"]] == [
         "correctness", "developmental_usefulness"
     ]
-    assert assessment_packet["protocol_version"] == "0.3.0"
+    assert feedback_packet["protocol_version"] == "0.3.0"
+    assert assessment_packet["protocol_version"] == "0.4.0"
+    assert [criterion["label"] for criterion in assessment_packet["criteria"]] == [
+        "Passung von Punktwert und Rubrik", "Belegstützung", "Qualität der Begründung"
+    ]
     assert [criterion["criterion_id"] for criterion in assessment_packet["criteria"]] == [
         "score_rubric_fit", "evidence_support", "justification_quality"
     ]
+    with pytest.raises(ValueError, match="not permitted on Task B"):
+        build_rating_packet(
+            task="assessment_quality",
+            run=_run(),
+            reflection_segments=_segments(),
+            rubric=rubric,
+            human_feedback="Must stay out of Task B.",
+        )
+
+
+def test_reference_packet_is_independent_and_shares_stable_reflection_identity() -> None:
+    rubric = RUBRIC_ARTIFACT.rubric.model_dump(mode="json")
+    segments = _segments()
+    reflection_id = make_reflection_id(segments)
+    reference_packet = build_reference_rating_packet(
+        reflection_segments=segments,
+        rubric=rubric,
+        reflection_id=reflection_id,
+    )
+    assessment_packet = build_rating_packet(
+        task="assessment_quality",
+        run=_run(),
+        reflection_segments=segments,
+        rubric=rubric,
+        reflection_id=reflection_id,
+    )
+
+    assert make_reflection_id(segments) == reflection_id
+    assert reference_packet["reflection_id"] == assessment_packet["reflection_id"]
+    assert reference_packet["task"] == "reflection_reference_score"
+    assert reference_packet["protocol_id"] == "reflection_reference_score_human"
+    assert reference_packet["protocol_version"] == "0.1.0"
+    assert reference_packet["scale"] == {
+        "min": 0,
+        "max": 3,
+        "step": 0.5,
+        "id": "reflection-reference-0-3-step-0.5-v1",
+        "anchors": {"0": "Rubrikanker 0", "1": "Rubrikanker 1", "2": "Rubrikanker 2", "3": "Rubrikanker 3"},
+    }
+    assert reference_packet["score_dimensions"] == [
+        {"dimension_id": dimension["dimension_id"], "label": dimension["name"]}
+        for dimension in rubric["dimensions"]
+    ]
+    assert reference_packet["reflection"] == {"segments": segments}
+    assert set(reference_packet["rubric"]) == {"version", "dimensions"}
+    assert all(set(dimension) == {"dimension_id", "name", "description", "bands"} for dimension in reference_packet["rubric"]["dimensions"])
+    assert reference_packet["condition_blinded"] is True
+    assert "output" not in reference_packet
+    assert "human_feedback" not in reference_packet
+    assert "document_id" not in reference_packet
+
+
+def test_reference_packet_preserves_modelling_candidates_and_unknown_dimension_values() -> None:
+    rows = pd.DataFrame([
+        {
+            "segment_id": "segment-a", "candidate_id": "candidate-a", "scope_target": 1,
+            "scope_target_known": True, "target_situationserfassung": 2,
+            "known_situationserfassung": True, "target_analyse": float("nan"),
+            "known_analyse": False, "target_konsequenzen": 1,
+            "known_konsequenzen": True, "requires_review": False,
+        },
+        {
+            "segment_id": "segment-a", "candidate_id": "candidate-b", "scope_target": 0,
+            "scope_target_known": True, "target_situationserfassung": "N",
+            "known_situationserfassung": False, "target_analyse": "N",
+            "known_analyse": False, "target_konsequenzen": "N",
+            "known_konsequenzen": False, "requires_review": True,
+        },
+    ])
+
+    annotations = build_segment_modelling_annotations(rows)
+    packet = build_reference_rating_packet(
+        reflection_segments=_segments(),
+        rubric=RUBRIC_ARTIFACT.rubric.model_dump(mode="json"),
+        reflection_id=make_reflection_id(_segments()),
+        segment_annotations=annotations,
+    )
+
+    assert len(packet["segment_annotations"]) == 6
+    first_candidate = [item for item in packet["segment_annotations"] if item["candidate_id"] == "candidate-a"]
+    second_candidate = [item for item in packet["segment_annotations"] if item["candidate_id"] == "candidate-b"]
+    assert len(first_candidate) == len(second_candidate) == 3
+    assert {item["scope"] for item in first_candidate} == {"in_scope"}
+    assert {item["scope"] for item in second_candidate} == {"out_of_scope"}
+    assert next(item for item in first_candidate if item["dimension_id"] == "UA")["known"] is False
+    assert next(item for item in first_candidate if item["dimension_id"] == "UA")["level"] == ""
+    assert all(item["requires_review"] for item in second_candidate)
+
+
+def test_modelling_band_summary_counts_known_bands_and_averages_positive_bands_only() -> None:
+    annotations = [
+        {"dimension_id": "SW", "level": "0", "known": True},
+        {"dimension_id": "SW", "level": "1", "known": True},
+        {"dimension_id": "SW", "level": "3", "known": True},
+        {"dimension_id": "SW", "level": "2", "known": False},
+        {"dimension_id": "UA", "level": "0", "known": True},
+        {"dimension_id": "UA", "level": "2", "known": True},
+        {"dimension_id": "HA", "level": "N", "known": False},
+    ]
+
+    summary = build_segment_annotation_summary(annotations)
+    by_dimension = {item["dimension_id"]: item for item in summary["dimensions"]}
+
+    assert summary["aggregation_unit"] == "candidate_annotation"
+    assert by_dimension["SW"]["known_band_count"] == 3
+    assert by_dimension["SW"]["band_counts"] == {"0": 1, "1": 1, "2": 0, "3": 1}
+    assert by_dimension["SW"]["band_percentages"] == {"1": 50.0, "2": 0.0, "3": 50.0}
+    assert by_dimension["SW"]["positive_band_count"] == 2
+    assert by_dimension["SW"]["mean_positive_band"] == 2.0
+    assert by_dimension["UA"]["mean_positive_band"] == 2.0
+    assert by_dimension["HA"]["known_band_count"] == 0
+    assert by_dimension["HA"]["mean_positive_band"] is None
+
+
+def test_playground_rating_packets_exclude_document_126(monkeypatch: pytest.MonkeyPatch) -> None:
+    cohort = pd.DataFrame([
+        {"document_id": "3", "feedback_text": "feedback 3"},
+        {"document_id": "64", "feedback_text": "feedback 64"},
+        {"document_id": "126", "feedback_text": "feedback 126"},
+        {"document_id": "188", "feedback_text": "feedback 188"},
+    ])
+    monkeypatch.setattr(rating_packets_module, "load_playground_feedback_cohort", lambda: cohort)
+
+    cohort_id, document_ids, feedback = rating_packets_module._select_packet_cohort(
+        "playground", config={}
+    )
+
+    assert cohort_id == "playground-author-188-reference-score-v12"
+    assert document_ids == ["3", "64", "188"]
+    assert feedback == {"3": "feedback 3", "64": "feedback 64", "188": "feedback 188"}
+
+
+def test_task_c_packet_builder_carries_historical_feedback_only_for_feedback_quality() -> None:
+    rubric = RUBRIC_ARTIFACT.rubric.model_dump(mode="json")
+    feedback_packet = build_rating_packet(
+        task="feedback_quality", run=_run(), reflection_segments=_segments(),
+        rubric=rubric, reflection_id="reflection-test", human_feedback="Historical lecturer feedback.",
+    )
+    assert feedback_packet["human_feedback"] == "Historical lecturer feedback."
+    assert feedback_packet["reflection_id"] == "reflection-test"
+    with pytest.raises(ValueError, match="not permitted on Task B"):
+        build_rating_packet(
+            task="assessment_quality", run=_run(), reflection_segments=_segments(),
+            rubric=rubric, human_feedback="Historical lecturer feedback.",
+        )
 
 
 def test_legacy_quality_protocol_keeps_original_scale(monkeypatch: pytest.MonkeyPatch) -> None:
-    config = load_experiment_config()
-    config["prompts"]["feedback_quality_human_version"] = "0.1.0"
     monkeypatch.setattr(
-        "reflection_assessment_feedback.rating_packets.load_experiment_config", lambda: config
+        "reflection_assessment_feedback.rating_packets.QUALITY_HUMAN_PROTOCOL_VERSIONS",
+        {"assessment_quality": "0.4.0", "feedback_quality": "0.1.0"},
     )
     packet = build_rating_packet(
         task="feedback_quality", run=_run(), reflection_segments=_segments(),
@@ -117,10 +278,9 @@ def test_revised_quality_llm_prompts_are_registered_and_renderable(task: str) ->
 
 
 def test_assessment_v02_preserves_four_criteria(monkeypatch: pytest.MonkeyPatch) -> None:
-    config = load_experiment_config()
-    config["prompts"]["assessment_quality_human_version"] = "0.2.0"
     monkeypatch.setattr(
-        "reflection_assessment_feedback.rating_packets.load_experiment_config", lambda: config
+        "reflection_assessment_feedback.rating_packets.QUALITY_HUMAN_PROTOCOL_VERSIONS",
+        {"assessment_quality": "0.2.0", "feedback_quality": "0.3.0"},
     )
     packet = build_rating_packet(
         task="assessment_quality", run=_run(), reflection_segments=_segments(),

@@ -21,8 +21,15 @@ from reflection_assessment_feedback.prompt_registry import resolve_prompt
 from reflection_assessment_feedback.rubric_registry import resolve_rubric
 
 RatingTask = Literal["assessment_quality", "feedback_quality"]
-PLAYGROUND_PACKET_COHORT = "playground-author-188-v1"
-REMAINING_TEST_PACKET_COHORT = "remaining-test-author-disjoint-g2-v1"
+PLAYGROUND_PACKET_COHORT = "playground-author-188-reference-score-v12"
+REMAINING_TEST_PACKET_COHORT = "remaining-test-author-disjoint-g2-reference-score-v12"
+PLAYGROUND_PACKET_EXCLUDED_DOCUMENT_IDS = {"126"}
+REFERENCE_SCORE_PROTOCOL_ID = "reflection_reference_score_human"
+REFERENCE_SCORE_PROTOCOL_VERSION = "0.1.0"
+QUALITY_HUMAN_PROTOCOL_VERSIONS = {
+    "assessment_quality": "0.4.0",
+    "feedback_quality": "0.3.0",
+}
 
 LEGACY_RATING_CRITERIA: dict[str, list[dict[str, str]]] = {
     "assessment_quality": [
@@ -55,74 +62,74 @@ LEGACY_SCALE = {
 RATING_CRITERIA = {
     "assessment_quality": [
         {
-            "criterion_id": "rubric_alignment", "label": "Rubric alignment",
-            "description": "Apply rubric dimensions and anchors to the whole reflection.",
+            "criterion_id": "rubric_alignment", "label": "Passung von Punktwert und Rubrik",
+            "description": "Ist der vergebene Punktwert angesichts der Reflexion und der Rubrikanker plausibel?",
             "anchors": {
-                "1": "Materially misapplies rubric dimensions or anchors.",
-                "2": "Partly aligns, with a limited inconsistency or unclear anchor application.",
-                "3": "Consistently applies rubric dimensions and anchors to the whole reflection.",
+                "1": "Der Punktwert widerspricht deutlich der Reflexion oder den Rubrikankern.",
+                "2": "Der Punktwert ist grundsätzlich plausibel, seine Einordnung innerhalb der Rubrik bleibt jedoch fraglich.",
+                "3": "Der Punktwert ist anhand der Reflexion und der Rubrikanker vertretbar.",
             },
         },
         {
-            "criterion_id": "score_defensibility", "label": "Score defensibility",
-            "description": "Judge score plausibility, not agreement with hidden reference scores.",
+            "criterion_id": "score_defensibility", "label": "Vertretbarkeit des Punktwerts",
+            "description": "Beurteilen Sie die Plausibilität der Gesamteinschätzung, nicht die Übereinstimmung mit einem verborgenen numerischen Referenzwert.",
             "anchors": {
-                "1": "Scores are substantially implausible given the reflection and rubric.",
-                "2": "Scores are partly defensible but a limited discrepancy remains.",
-                "3": "Scores are plausible and defensible given the reflection and rubric.",
+                "1": "Der Punktwert ist angesichts der Reflexion und der Rubrik deutlich unplausibel.",
+                "2": "Der Punktwert ist teilweise vertretbar, eine relevante Unstimmigkeit bleibt.",
+                "3": "Der Punktwert ist anhand der Reflexion und der Rubrik plausibel und vertretbar.",
             },
         },
         {
-            "criterion_id": "evidence_support", "label": "Evidence support",
-            "description": "Check whether cited evidence supports the central judgments.",
+            "criterion_id": "evidence_support", "label": "Belegstützung",
+            "description": "Stützen die angeführten Reflexionssegmente die zentralen Urteile?",
             "anchors": {
-                "1": "Central judgments rely on absent, irrelevant, or contradictory evidence.",
-                "2": "Some evidence supports the judgments, but a meaningful gap remains.",
-                "3": "Cited evidence exists and supports the central judgments.",
+                "1": "Zentrale Urteile beruhen auf fehlenden, irrelevanten oder widersprüchlichen Belegen.",
+                "2": "Ein Teil der Belege stützt die Urteile, eine wesentliche Lücke bleibt.",
+                "3": "Die angeführten Belege sind vorhanden und stützen die zentralen Urteile.",
             },
         },
         {
-            "criterion_id": "justification_quality", "label": "Justification quality",
-            "description": "Judge the clarity and logic of dimension-specific rationales.",
+            "criterion_id": "justification_quality", "label": "Qualität der Begründung",
+            "description": "Erklärt die Begründung nachvollziehbar, wie Reflexionsevidenz und Rubrik zum Punktwert führen?",
             "anchors": {
-                "1": "Rationales are missing, incoherent, or fail to explain the judgments.",
-                "2": "Rationales partly explain the judgments but are vague or weakly connected.",
-                "3": "Rationales clearly connect dimension judgments, rubric, and reflection evidence.",
+                "1": "Begründungen fehlen, sind unverständlich oder erklären die Urteile nicht.",
+                "2": "Begründungen erklären die Urteile teilweise, bleiben aber vage oder schwach verknüpft.",
+                "3": "Begründungen verknüpfen Urteile, Rubrik und Reflexionsevidenz klar.",
             },
         },
     ],
     "feedback_quality": [
         {
-            "criterion_id": "correctness", "label": "Correctness",
-            "description": "Claims fit the reflection and rubric; citations are not required and omissions are not errors.",
+            "criterion_id": "correctness", "label": "Korrektheit",
+            "description": "Geben die Aussagen Reflexion und Rubrik zutreffend wieder, ohne Ereignisse zu erfinden oder irrezuführen? Explizite Zitate sind nicht erforderlich; Auslassungen sind für sich genommen kein Fehler.",
             "anchors": {
-                "1": "Major inaccuracies or misleading interpretations undermine the feedback.",
-                "2": "Mostly accurate, but contains a limited error, overstatement, or questionable interpretation.",
-                "3": "Accurate and defensible against the reflection and rubric, with no material inaccuracies.",
+                "1": "Wesentliche Ungenauigkeiten oder irreführende Deutungen beeinträchtigen das Feedback deutlich.",
+                "2": "Das Feedback ist überwiegend zutreffend, enthält aber einen begrenzten Fehler, eine Übertreibung oder eine fragwürdige Deutung.",
+                "3": "Das Feedback ist anhand von Reflexion und Rubrik zutreffend und vertretbar; wesentliche Ungenauigkeiten fehlen.",
             },
         },
         {
-            "criterion_id": "developmental_usefulness", "label": "Developmental usefulness",
-            "description": "A relevant suggestion or productive reflective question can provide a meaningful way forward.",
+            "criterion_id": "developmental_usefulness", "label": "Entwicklungsnutzen",
+            "description": "Eröffnet das Feedback einen relevanten und sinnvollen nächsten Schritt? Ein konkreter Vorschlag oder eine produktive Frage kann hilfreich sein.",
             "anchors": {
-                "1": "Generic, irrelevant, or provides no meaningful direction.",
-                "2": "Relevant and partly useful, but the direction is vague or underdeveloped.",
-                "3": "Offers a clear, relevant next step or productive direction for deeper reflection.",
+                "1": "Das Feedback ist allgemein oder irrelevant und eröffnet keine sinnvolle Entwicklungsperspektive.",
+                "2": "Das Feedback ist teilweise hilfreich, bleibt aber vage oder wenig ausgearbeitet.",
+                "3": "Das Feedback bietet einen klaren, relevanten nächsten Schritt oder eine produktive Anregung zur vertieften Reflexion.",
             },
         },
     ],
 }
 
-SCALE = {"min": 1, "max": 3, "anchors": {"1": "Poor", "2": "Mixed", "3": "Strong"}}
+SCALE = {"min": 1, "max": 3, "anchors": {"1": "Schwach", "2": "Gemischt", "3": "Stark"}}
 
 ASSESSMENT_CRITERIA_V03 = [
     {
-        "criterion_id": "score_rubric_fit", "label": "Score-Rubric Fit",
-        "description": "Judge score plausibility against the reflection and rubric anchors, not hidden reference scores.",
+        "criterion_id": "score_rubric_fit", "label": "Passung von Punktwert und Rubrik",
+        "description": "Ist der vergebene Punktwert angesichts der Reflexion und der Rubrikanker plausibel? Beurteilen Sie die Plausibilität der Gesamteinschätzung, nicht die Übereinstimmung mit einem verborgenen numerischen Referenzwert.",
         "anchors": {
-            "1": "The score substantially conflicts with the reflection or rubric anchors.",
-            "2": "The score is broadly plausible, but its placement within the rubric is questionable.",
-            "3": "The score is defensible given the reflection and rubric anchors.",
+            "1": "Der Punktwert widerspricht deutlich der Reflexion oder den Rubrikankern.",
+            "2": "Der Punktwert ist grundsätzlich plausibel, seine Einordnung innerhalb der Rubrik bleibt jedoch fraglich.",
+            "3": "Der Punktwert ist anhand der Reflexion und der Rubrikanker vertretbar.",
         },
     },
     *RATING_CRITERIA["assessment_quality"][2:],
@@ -188,41 +195,199 @@ def normalize_feedback(run: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     return normalized
 
 
+def make_reflection_id(reflection_segments: list[dict[str, Any]]) -> str:
+    segment_ids = [str(segment["segment_id"]) for segment in reflection_segments]
+    if not segment_ids or len(segment_ids) != len(set(segment_ids)):
+        raise ValueError("A reflection identity requires unique segment IDs.")
+    digest = hashlib.sha256(
+        json.dumps(segment_ids, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return f"reflection-{digest[:32]}"
+
+
+def _annotation_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    normalized = str(value).strip().lower()
+    return normalized in {"1", "true", "yes", "y"}
+
+
+def _annotation_text(value: Any) -> str:
+    if value is None:
+        return ""
+    try:
+        import pandas as pd
+
+        if pd.isna(value):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value).strip()
+
+def build_segment_modelling_annotations(document_rows: Any) -> list[dict[str, Any]]:
+    dimensions = (
+        ("SW", "target_situationserfassung", "known_situationserfassung"),
+        ("UA", "target_analyse", "known_analyse"),
+        ("HA", "target_konsequenzen", "known_konsequenzen"),
+    )
+    annotations: list[dict[str, Any]] = []
+    for row in document_rows.itertuples(index=False):
+        candidate_id = _annotation_text(row.candidate_id)
+        if not candidate_id:
+            raise ValueError("Modelling reference rows must have a candidate ID.")
+        scope_known = _annotation_bool(row.scope_target_known)
+        scope_value = _annotation_text(row.scope_target)
+        scope = "in_scope" if scope_known and scope_value == "1" else (
+            "out_of_scope" if scope_known and scope_value == "0" else "unknown"
+        )
+        requires_review = _annotation_bool(row.requires_review)
+        for dimension_id, target_column, known_column in dimensions:
+            annotations.append(
+                {
+                    "segment_id": str(row.segment_id),
+                    "dimension_id": dimension_id,
+                    "skill_label": dimension_id,
+                    "level": _annotation_text(getattr(row, target_column)),
+                    "candidate_id": candidate_id,
+                    "scope": scope,
+                    "scope_known": scope_known,
+                    "known": _annotation_bool(getattr(row, known_column)),
+                    "requires_review": requires_review,
+                }
+            )
+    return annotations
+
+
+def build_segment_annotation_summary(annotations: list[dict[str, Any]]) -> dict[str, Any]:
+    dimensions: list[dict[str, Any]] = []
+    for dimension_id in ("SW", "UA", "HA"):
+        counts = {str(band): 0 for band in range(4)}
+        for annotation in annotations:
+            if annotation["dimension_id"] != dimension_id or annotation["known"] is not True:
+                continue
+            band = annotation["level"]
+            if band in counts:
+                counts[band] += 1
+        known_count = sum(counts.values())
+        positive_count = counts["1"] + counts["2"] + counts["3"]
+        positive_mean = (
+            round((counts["1"] + 2 * counts["2"] + 3 * counts["3"]) / positive_count, 3)
+            if positive_count
+            else None
+        )
+        dimensions.append(
+            {
+                "dimension_id": dimension_id,
+                "known_band_count": known_count,
+                "positive_band_count": positive_count,
+                "band_counts": counts,
+                "band_percentages": {
+                    band: round(counts[band] * 100 / positive_count, 1) if positive_count else 0.0
+                    for band in ("1", "2", "3")
+                },
+                "mean_positive_band": positive_mean,
+            }
+        )
+    return {"aggregation_unit": "candidate_annotation", "dimensions": dimensions}
+
+
+def build_reference_rating_packet(
+    *,
+    reflection_segments: list[dict[str, Any]],
+    rubric: dict[str, Any],
+    reflection_id: str,
+    segment_annotations: list[dict[str, Any]] | None = None,
+    segment_annotation_summary: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    protocol = resolve_prompt(
+        REFERENCE_SCORE_PROTOCOL_ID,
+        REFERENCE_SCORE_PROTOCOL_VERSION,
+    )
+    reflection_snapshot = {"segments": reflection_segments}
+    dimensions = [
+        {
+            "dimension_id": dimension["dimension_id"],
+            "name": dimension["name"],
+            "description": dimension["description"],
+            "bands": dimension["bands"],
+        }
+        for dimension in rubric["dimensions"]
+    ]
+    reference_rubric = {"version": rubric["version"], "dimensions": dimensions}
+    packet = {
+        "packet_id": str(uuid4()),
+        "reflection_id": reflection_id,
+        "task": "reflection_reference_score",
+        "packet_version": "1.0.0",
+        "protocol_id": protocol.artifact_id,
+        "protocol_version": protocol.version,
+        "human_protocol": protocol.text,
+        "scale": {
+            "min": 0,
+            "max": 3,
+            "step": 0.5,
+            "id": "reflection-reference-0-3-step-0.5-v1",
+            "anchors": {str(score): f"Rubrikanker {score}" for score in range(4)},
+        },
+        "score_dimensions": [
+            {"dimension_id": dimension["dimension_id"], "label": dimension["name"]}
+            for dimension in dimensions
+        ],
+        "displayed_reflection_sha256": _sha256_json(reflection_snapshot),
+        "reflection": reflection_snapshot,
+        "rubric": reference_rubric,
+        **({"segment_annotations": segment_annotations} if segment_annotations else {}),
+        **({"segment_annotation_summary": segment_annotation_summary} if segment_annotation_summary else {}),
+        "condition_blinded": True,
+        "displayed_context": ["segmented_reflection", "rubric"],
+    }
+    return packet
+
+
 def build_rating_packet(
     *,
     task: RatingTask,
     run: dict[str, Any],
     reflection_segments: list[dict[str, Any]],
     rubric: dict[str, Any],
+    reflection_id: str | None = None,
+    human_feedback: str | None = None,
 ) -> dict[str, Any]:
     if task not in RATING_CRITERIA:
         raise ValueError(f"Unsupported rating task: {task}")
+    if task == "assessment_quality" and human_feedback is not None:
+        raise ValueError("Historical feedback is not permitted on Task B packets.")
     if task == "assessment_quality":
         protocol_config = load_experiment_config()["prompts"]
         protocol_id = protocol_config["assessment_quality_human_id"]
-        protocol_version = protocol_config["assessment_quality_human_version"]
+        protocol_version = QUALITY_HUMAN_PROTOCOL_VERSIONS[task]
         protocol = resolve_prompt(protocol_id, protocol_version)
         output = normalize_assessment(run)
         displayed_context = ["segmented_reflection", "rubric", "assessment_output"]
     else:
         protocol_config = load_experiment_config()["prompts"]
         protocol_id = protocol_config["feedback_quality_human_id"]
-        protocol_version = protocol_config["feedback_quality_human_version"]
+        protocol_version = QUALITY_HUMAN_PROTOCOL_VERSIONS[task]
         protocol = resolve_prompt(protocol_id, protocol_version)
         output = normalize_feedback(run)
         displayed_context = ["segmented_reflection", "rubric", "feedback_output"]
 
     packet_id = str(uuid4())
-    supported_versions = {"0.1.0", "0.2.0", "0.3.0"} if task == "assessment_quality" else {"0.1.0", "0.2.0"}
+    supported_versions = {"0.1.0", "0.2.0", "0.3.0", "0.4.0"} if task == "assessment_quality" else {"0.1.0", "0.2.0", "0.3.0"}
     if protocol_version not in supported_versions:
         raise ValueError("Unsupported quality protocol version; define its criteria and scale first.")
     legacy = protocol_version == "0.1.0"
     criteria = LEGACY_RATING_CRITERIA[task] if legacy else RATING_CRITERIA[task]
-    if task == "assessment_quality" and protocol_version == "0.3.0":
+    if task == "assessment_quality" and protocol_version in {"0.3.0", "0.4.0"}:
         criteria = ASSESSMENT_CRITERIA_V03
     reflection_snapshot = {"segments": reflection_segments}
     packet = {
         "packet_id": packet_id,
+        **({"reflection_id": reflection_id} if reflection_id is not None else {}),
         "task": task,
         "packet_version": "1.0.0",
         "protocol_id": protocol_id,
@@ -236,6 +401,7 @@ def build_rating_packet(
         "reflection": reflection_snapshot,
         "rubric": rubric,
         "output": output,
+        **({"human_feedback": human_feedback} if task == "feedback_quality" and human_feedback is not None else {}),
         "condition_blinded": True,
         "displayed_context": displayed_context,
     }
@@ -249,6 +415,9 @@ def _select_packet_cohort(
 ) -> tuple[str, list[str], dict[str, str]]:
     if cohort == "playground":
         cohort_feedback = load_playground_feedback_cohort()
+        cohort_feedback = cohort_feedback.loc[
+            ~cohort_feedback["document_id"].astype(str).isin(PLAYGROUND_PACKET_EXCLUDED_DOCUMENT_IDS)
+        ].copy()
         selected_document_ids = cohort_feedback["document_id"].astype(str).tolist()
         selected_feedback = dict(
             zip(
@@ -296,13 +465,16 @@ def _load_author_disjoint_g2_runs(
         }
     )
     expected_ids = set(document_ids)
+    accepted_batch_ids = expected_ids
+    if cohort == "playground":
+        accepted_batch_ids = set(load_playground_feedback_cohort()["document_id"].astype(str))
     matching_batches: list[tuple[Path, dict[str, Any]]] = []
     for provenance_path in sorted(
         (protected_root / "g2" / "author-disjoint-evaluation").glob("*/provenance.json")
     ):
         provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
         if (
-            set(map(str, provenance.get("document_ids", []))) == expected_ids
+            set(map(str, provenance.get("document_ids", []))) == accepted_batch_ids
             and provenance.get("cohort_rule") == expected_rule
             and provenance.get("training_run_id") == checkpoint_directory.name
             and provenance.get("classifier_architecture") == "direct"
@@ -423,10 +595,15 @@ def build_development_rating_packet_bundle(
 
     rows = pd.read_csv(
         split_path,
-        usecols=["document_id", "segment_id", "text", "segment_order"],
-        dtype={"document_id": str, "segment_id": str},
+        usecols=[
+            "document_id", "segment_id", "candidate_id", "text", "segment_order",
+            "scope_target", "scope_target_known",
+            "target_situationserfassung", "known_situationserfassung",
+            "target_analyse", "known_analyse",
+            "target_konsequenzen", "known_konsequenzen", "requires_review",
+        ],
+        dtype={"document_id": str, "segment_id": str, "candidate_id": str},
     )
-    feedback_path = (project_root / config["paths"]["human_feedback"]).resolve()
     cohort_id, selected_document_ids, feedback_by_document = _select_packet_cohort(
         cohort,
         config=config,
@@ -481,6 +658,8 @@ def build_development_rating_packet_bundle(
 
     packets: list[dict[str, Any]] = []
     key_records: list[dict[str, Any]] = []
+    split_sha256 = hashlib.sha256(split_path.read_bytes()).hexdigest()
+    reference_packet_count = 0
     for document_id in selected_document_ids:
         document_rows = rows.loc[rows["document_id"] == document_id].copy()
         if document_rows.empty:
@@ -491,6 +670,10 @@ def build_development_rating_packet_bundle(
         )
         if (consistency > 1).any().any():
             raise ValueError("Reflection candidate copies disagree on segment text or order.")
+        if document_rows["candidate_id"].isna().any() or document_rows["candidate_id"].str.strip().eq("").any():
+            raise ValueError("Modelling reference candidates contain missing candidate IDs.")
+        if document_rows.duplicated(["segment_id", "candidate_id"]).any():
+            raise ValueError("Modelling reference candidates contain duplicate segment/candidate rows.")
         document_rows = document_rows.drop_duplicates("segment_id").sort_values("segment_order")
         reflection_segments = [
             {
@@ -500,6 +683,30 @@ def build_development_rating_packet_bundle(
             }
             for row in document_rows.itertuples(index=False)
         ]
+        reflection_id = make_reflection_id(reflection_segments)
+        modelling_annotations = build_segment_modelling_annotations(
+            rows.loc[rows["document_id"] == document_id].copy()
+        )
+        reference_packet = build_reference_rating_packet(
+            reflection_segments=reflection_segments,
+            rubric=rubric_json,
+            reflection_id=reflection_id,
+            segment_annotations=modelling_annotations,
+            segment_annotation_summary=build_segment_annotation_summary(modelling_annotations),
+        )
+        packets.append(reference_packet)
+        key_records.append(
+            {
+                "packet_id": reference_packet["packet_id"],
+                "document_id": document_id,
+                "condition": None,
+                "run_id": None,
+                "repetition": None,
+                "task": "reflection_reference_score",
+                "source_artifact_sha256": split_sha256,
+            }
+        )
+        reference_packet_count += 1
         comparison_path, comparison, g2_path, g2_envelope = matched_artifacts[document_id]
         pair = comparison["pairs"][0]
         run_records = {
@@ -516,6 +723,8 @@ def build_development_rating_packet_bundle(
                     run=run,
                     reflection_segments=reflection_segments,
                     rubric=rubric_json,
+                    reflection_id=reflection_id,
+                    human_feedback=feedback_by_document[document_id] if task == "feedback_quality" else None,
                 )
                 packets.append(packet)
                 key_records.append(
@@ -532,62 +741,6 @@ def build_development_rating_packet_bundle(
                     }
                 )
 
-    score_protocol_config = config["prompts"]
-    score_protocol = resolve_prompt(
-        score_protocol_config["feedback_implied_score_human_id"],
-        score_protocol_config["feedback_implied_score_human_version"],
-    )
-    score_packet_count = 0
-    for document_id in selected_document_ids:
-        human_feedback = feedback_by_document[document_id]
-        reflection_segments = [
-            {
-                "segment_id": row.segment_id,
-                "order": int(row.segment_order),
-                "text": str(row.text),
-            }
-            for row in (
-                rows.loc[rows["document_id"] == document_id]
-                .drop_duplicates("segment_id")
-                .sort_values("segment_order")
-                .itertuples(index=False)
-            )
-        ]
-        reflection_snapshot = {"segments": reflection_segments}
-        packet = {
-            "packet_id": str(uuid4()),
-            "task": "feedback_implied_score",
-            "packet_version": "1.0.0",
-            "protocol_id": score_protocol.artifact_id,
-            "protocol_version": score_protocol.version,
-            "human_protocol": score_protocol.text,
-            "score_dimensions": [
-                {"dimension_id": dimension["dimension_id"], "label": dimension["name"]}
-                for dimension in rubric_json["dimensions"]
-            ],
-            "display_output_sha256": _sha256_json(human_feedback),
-            "displayed_reflection_sha256": _sha256_json(reflection_snapshot),
-            "rubric_version": rubric_entry.version,
-            "reflection": reflection_snapshot,
-            "rubric": rubric_json,
-            "human_feedback": human_feedback,
-            "condition_blinded": True,
-            "displayed_context": ["segmented_reflection", "rubric", "original_human_feedback"],
-        }
-        packets.append(packet)
-        key_records.append(
-            {
-                "packet_id": packet["packet_id"],
-                "document_id": document_id,
-                "condition": None,
-                "run_id": None,
-                "repetition": None,
-                "task": "feedback_implied_score",
-                "source_artifact_sha256": hashlib.sha256(feedback_path.read_bytes()).hexdigest(),
-            }
-        )
-        score_packet_count += 1
-
     packet_bundle = {"schema_version": "1.0.0", "packets": packets}
     condition_key = {
         "schema_version": "1.0.0",
@@ -595,7 +748,10 @@ def build_development_rating_packet_bundle(
         "records": key_records,
     }
     expected_packet_count = len(selected_document_ids) * 7
-    if len(packets) != expected_packet_count or score_packet_count != len(selected_document_ids):
+    if (
+        len(packets) != expected_packet_count
+        or reference_packet_count != len(selected_document_ids)
+    ):
         raise ValueError("Rating packet count differs from the configured cohort size.")
     if write:
         output_dir = root / "rating-packets" / "development"

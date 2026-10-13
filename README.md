@@ -54,7 +54,7 @@ copy rather than maintaining a second independent copy.
 | 04    | [04_generate_g2.ipynb](04_generate_g2.ipynb)                                   | G2 generation matched to predictions and G1/G3 artifacts |
 | 05    | [05_segment_evaluation.ipynb](05_segment_evaluation.ipynb)                     | Segment evaluation                                       |
 | 06    | [06_feedback_implied_score_pilot.ipynb](06_feedback_implied_score_pilot.ipynb) | Feedback-implied score pilot                             |
-| 07    | [07_rating_packet_export.ipynb](07_rating_packet_export.ipynb)                 | Local preflight and protected blinded-packet export      |
+| 07    | [07_rating_packet_export.ipynb](07_rating_packet_export.ipynb)                 | Staged playground/test export for Task A references and G1/G2/G3 quality packets |
 | 08    | [08_llm_judge_pilot.ipynb](08_llm_judge_pilot.ipynb)                           | Protected LLM assessment/feedback quality judging       |
 | 09    | [09_llm_judge_analysis.ipynb](09_llm_judge_analysis.ipynb)                     | Descriptive judge-result and optional human comparison  |
 | 10    | [10_generation_consistency.ipynb](10_generation_consistency.ipynb)             | Independent G1/G2/G3 repetitions and categorical agreement |
@@ -201,7 +201,7 @@ complete comparisons until every reflection has five valid repetitions.
 Repeatability does not establish assessment accuracy or feedback quality;
 historical baselines also differ in generation date, so comparisons are descriptive.
 
-The judge workflow separates a playground from final test analysis. Playground mode selects the four test-split reflections by the author group of exploratory document 188: documents 3, 64, 126, and 188. Excluding this author from the 24-document classifier test set leaves 20 documents; explicitly excluding documents 218 and 221, which lack teacher-feedback records, leaves 18 reference-complete test reflections. Other authors' R1 reflections remain eligible. The source split remains unchanged. Existing generation and judge artifacts are retained. Assessment prompt `0.5.0` uses aggregate candidate-grain gold-analysis summaries. Never pool the playground author's scores into final test summaries. Missing or ambiguous teacher-reference records in the selected cohort cause an explicit error rather than silently shrinking the cohort. Treat all results as descriptive pilot evidence, not confirmatory findings.
+The judge workflow separates a playground from final test analysis. The broader playground author group contains test-split documents 3, 64, 126, and 188. The staged rating-packet playground deliberately excludes document 126 and rates documents 3, 64, and 188; its existing G2 artifact may still include document 126, but no packet for that document is exported. Excluding this author from the 24-document classifier test set leaves 20 documents; explicitly excluding documents 218 and 221, which lack teacher-feedback records, leaves 18 reference-complete test reflections. Other authors' R1 reflections remain eligible. The source split remains unchanged. Existing generation and judge artifacts are retained. Assessment prompt `0.5.0` uses aggregate candidate-grain gold-analysis summaries. Never pool the playground author's scores into final test summaries. Missing or ambiguous teacher-reference records in the selected cohort cause an explicit error rather than silently shrinking the cohort. Treat all results as descriptive pilot evidence, not confirmatory findings.
 
 ## Research Questions
 
