@@ -1,0 +1,91 @@
+{
+  "rubric_id": "unterrichtsreflexion-expert",
+  "version": "1.2.0",
+  "level": "document",
+  "scale": {
+    "min": 0,
+    "max": 3,
+    "anchors": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "interpretation": "Ordinal verankerte Dokumentbewertung mit vier Hauptankern und drei operational definierten Zwischenwerten. Halbschritte sind eine Bewertungskonvention, kein Nachweis intervallskalierter Messung.",
+    "step": 0.5,
+    "allowed_scores": [
+      0,
+      0.5,
+      1,
+      1.5,
+      2,
+      2.5,
+      3
+    ],
+    "intermediate_scores": [
+      0.5,
+      1.5,
+      2.5
+    ]
+  },
+  "glossary": {
+    "bedeutsame_und_reflexionsrelevante_situation": "Ein konkreter Unterrichts-, Handlungs- oder Interaktionsmoment mit erkennbarem Potenzial zur professionellen Reflexion. Bedeutsamkeit kann sich aus Lernprozessen, Spannungen, Entscheidungen, Routinen oder pädagogischen Dilemmata ergeben; ein außergewöhnlicher Routinebruch ist nicht erforderlich.",
+    "tiefenstrukturen_und_ursachenanalyse": "Erklärende oder interpretierende Auseinandersetzung mit Bedingungen, Motiven, Mechanismen und Zusammenhängen des Unterrichtsgeschehens, die über eine bloße Beschreibung hinausgeht. Beobachtungen, Perspektivwechsel, professionelles Wissen und Theorien können die Analyse stützen.",
+    "handlungsalternativen": "Konkrete oder begründet abgeleitete Optionen für zukünftiges professionelles Handeln, einschließlich begründeter Beibehaltung oder Anpassung bisheriger Vorgehensweisen.",
+    "core_reflections": "Reflexion über persönliche Werte, Überzeugungen, professionelle Identität, Ideale oder Kernqualitäten und deren Bedeutung für das eigene pädagogische Handeln. Ein möglicher, aber nicht obligatorischer Weg zu vertiefter Reflexion.",
+    "analyse_und_reflexion": "Unterrichtsanalyse untersucht und interpretiert Unterrichtsgeschehen. Professionelle Reflexion setzt die Erkenntnisse in Bezug zu pädagogischen Entscheidungen, eigenem Handeln oder professionellen Orientierungen; explizite Identitätsreflexion ist nicht in jeder Dimension oder auf jeder Stufe erforderlich."
+  },
+  "assessment_principles": {
+    "unit": "Gesamtes Reflexionsdokument; relevante Textstellen können gemeinsam eine Leistung belegen.",
+    "segment_evidence": "Segmentlabels A/B/C sind Hinweise auf lokalisierte Evidenz, keine Dokumentnoten. Häufigkeiten, Mittelwerte, Mehrheits- oder Maximalwerte bestimmen die Dokumentnote nicht.",
+    "synthesis_criteria": {
+      "demonstrated_depth": "Welche Qualität der dimensionsspezifischen Reflexionsleistung ist tatsächlich belegt?",
+      "development": "Wie konkret, nachvollziehbar und hinreichend ausgearbeitet sind die relevanten Beiträge?",
+      "integrative_coherence": "Wie sinnvoll beziehen sich einschlägige Aussagen und Belege aufeinander? Nicht jede Dimension verlangt eine vollständige SW-UA-HA-Kette."
+    },
+    "decision_rule": "Bewerte jede Dimension anhand des vollständigen Dokuments. Ermittle zuerst den höchsten vollständig durch die Gesamtevidenz gestützten Hauptanker (0, 1, 2 oder 3). Vergib einen Zwischenwert nur dann, wenn der niedrigere Hauptanker erfüllt ist und konkrete Merkmale des nächsthöheren Ankers erkennbar, dessen Anforderungen insgesamt aber noch nicht hinreichend erfüllt sind. Vergib den nächsthöheren ganzzahligen Wert nur, wenn dessen Anforderungen hinreichend belegt sind. Keine mechanische Aggregation von Segmentlabels; fehlende Evidenz nicht ergänzen.",
+    "evidence_requirements": "Begründe jede Bewertung durch konkrete Textbezüge und benenne wesentliche Grenzen oder Unsicherheiten. Fehlende Leistungen dürfen nur aus dem vollständig vorliegenden Dokument beurteilt werden.",
+    "scoring_precision": "Zulässige Scores ausschließlich 0, 0.5, 1, 1.5, 2, 2.5, 3. Zwischenwerte sind begründungspflichtige Urteile zwischen benachbarten Hauptankern; sie entstehen nicht durch Mittelung, Rundung oder arithmetische Interpolation von Segmentwerten. Diese Auflösung ist eine operationale Konvention und muss hinsichtlich Übereinstimmung und Stabilität empirisch geprüft werden.",
+    "intermediate_score_rule": {
+      "0.5": "Anker 0 ist erfüllt; einzelne nachvollziehbare Merkmale von Anker 1 sind vorhanden, reichen für Anker 1 insgesamt aber nicht aus.",
+      "1.5": "Anker 1 ist erfüllt; einzelne nachvollziehbare Merkmale von Anker 2 sind vorhanden, reichen für Anker 2 insgesamt aber nicht aus.",
+      "2.5": "Anker 2 ist erfüllt; einzelne nachvollziehbare Merkmale von Anker 3 sind vorhanden, reichen für Anker 3 insgesamt aber nicht aus.",
+      "justification": "Bei Zwischenwerten konkret benennen, welche Anforderungen des unteren Ankers erfüllt sind, welche Merkmale des oberen Ankers erkennbar sind und was zur vollen Erfüllung fehlt."
+    }
+  },
+  "dimensions": [
+    {
+      "dimension_id": "SW",
+      "name": "Situationswahrnehmung",
+      "description": "Auswahl, Rekonstruktion und Charakterisierung einer bedeutsamen und/oder reflexionsrelevanten Unterrichtssituation im Gesamtdokument.",
+      "bands": {
+        "0": "Keine hinreichend nachvollziehbare reflexionsrelevante Unterrichtssituation wird rekonstruiert. Einzelne Hinweise auf Unterricht, pauschale Aussagen oder bruchstückhafte Beobachtungen können vorhanden sein.",
+        "1": "Eine konkrete, potenziell reflexionsrelevante Situation ist erkennbar und in Grundzügen beschrieben; wesentliche Umstände, Abläufe oder Perspektiven bleiben jedoch unklar oder wenig ausgearbeitet.",
+        "2": "Eine bedeutsame oder reflexionsrelevante Situation wird anhand relevanter Ereignisse, Beteiligter und Kontextinformationen nachvollziehbar rekonstruiert; ihre Relevanz für das pädagogische Handeln wird erkennbar.",
+        "3": "Die Situation wird präzise, differenziert und kontextsensibel rekonstruiert. Mehrere relevante Beobachtungen oder Perspektiven werden integriert und ihre Bedeutung für Wahrnehmung, pädagogische Entscheidungen oder professionelle Orientierungen reflektiert."
+      }
+    },
+    {
+      "dimension_id": "UA",
+      "name": "Ursachenanalyse",
+      "description": "Interpretation und Erklärung von Ursachen, Bedingungen oder Zusammenhängen im Unterricht unter Berücksichtigung von Vorbereitung und/oder Durchführung.",
+      "bands": {
+        "0": "Eine nachvollziehbare Erklärung von Ursachen oder Zusammenhängen wird nicht demonstriert. Beschreibungen, Bewertungen, bloße Behauptungen oder unzureichende Erklärungsversuche können vorkommen.",
+        "1": "Mindestens ein für die Situation relevanter Ursache-Wirkungs- oder Bedingungszusammenhang wird erkennbar erklärt, bleibt jedoch einfach, wenig differenziert oder nur schwach durch Beobachtungen oder Argumente gestützt.",
+        "2": "Relevante Ursachen, Bedingungen oder Zusammenhänge werden nachvollziehbar erläutert und durch konkrete Beobachtungen, plausible Argumente oder professionelles Wissen gestützt; die Erklärung berücksichtigt wesentliche Kontextbedingungen.",
+        "3": "Ursachen und Zusammenhänge werden differenziert und kohärent untersucht. Die Analyse prüft oder verbindet mehrere relevante Erklärungen, Perspektiven, Kontextbedingungen oder theoretische Bezüge und reflektiert deren Tragfähigkeit bzw. Grenzen."
+      }
+    },
+    {
+      "dimension_id": "HA",
+      "name": "Handlungsalternativen",
+      "description": "Entwicklung, Begründung und Abwägung zukunftsorientierter Optionen für professionelles Handeln unter Berücksichtigung von Vorbereitung und/oder Durchführung.",
+      "bands": {
+        "0": "Keine hinreichend plausible und auf die reflektierte Situation bezogene Handlungsoption oder Konsequenz wird demonstriert. Eine Option kann fehlen, vage, unpassend oder nicht nachvollziehbar sein.",
+        "1": "Mindestens eine grundsätzlich plausible, situationsbezogene Handlungsoption oder Konsequenz wird benannt, bleibt jedoch hinsichtlich Umsetzung, Ziel oder Begründung wenig ausgearbeitet.",
+        "2": "Eine konkrete und zielführende Handlungsoption oder Konsequenz wird aus einem erkennbaren Bedarf oder einer relevanten Beobachtung abgeleitet und nachvollziehbar begründet; wesentliche Bedingungen der Umsetzung werden berücksichtigt.",
+        "3": "Handlungsoptionen oder begründete Konsequenzen werden differenziert aus der Reflexion abgeleitet, hinsichtlich ihrer Wirkungen, Voraussetzungen, Grenzen oder Alternativen abgewogen und mit relevanten Beobachtungen, Erklärungen oder professionellem Wissen verknüpft."
+      }
+    }
+  ]
+}

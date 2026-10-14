@@ -21,8 +21,8 @@ from reflection_assessment_feedback.prompt_registry import resolve_prompt
 from reflection_assessment_feedback.rubric_registry import resolve_rubric
 
 RatingTask = Literal["assessment_quality", "feedback_quality"]
-PLAYGROUND_PACKET_COHORT = "playground-author-188-reference-score-v12"
-REMAINING_TEST_PACKET_COHORT = "remaining-test-author-disjoint-g2-reference-score-v12"
+PLAYGROUND_PACKET_COHORT = "playground-author-188-reference-score-v13"
+REMAINING_TEST_PACKET_COHORT = "remaining-test-author-disjoint-g2-reference-score-v13"
 PLAYGROUND_PACKET_EXCLUDED_DOCUMENT_IDS = {"126"}
 REFERENCE_SCORE_PROTOCOL_ID = "reflection_reference_score_human"
 REFERENCE_SCORE_PROTOCOL_VERSION = "0.1.0"
@@ -376,6 +376,12 @@ def build_rating_packet(
         output = normalize_feedback(run)
         displayed_context = ["segmented_reflection", "rubric", "feedback_output"]
 
+    segment_ids = {segment["segment_id"] for segment in reflection_segments}
+    for items in output.values():
+        for item in items:
+            if set(item["evidence_segment_ids"]) - segment_ids:
+                raise ValueError("Output evidence cites a segment outside the displayed reflection.")
+
     packet_id = str(uuid4())
     supported_versions = {"0.1.0", "0.2.0", "0.3.0", "0.4.0"} if task == "assessment_quality" else {"0.1.0", "0.2.0", "0.3.0"}
     if protocol_version not in supported_versions:
@@ -707,7 +713,7 @@ def build_development_rating_packet_bundle(
             }
         )
         reference_packet_count += 1
-        comparison_path, comparison, g2_path, g2_envelope = matched_artifacts[document_id]
+        comparison_path, comparison, g2_path, g2_run = matched_artifacts[document_id]
         pair = comparison["pairs"][0]
         run_records = {
             "G1": pair["G1"],

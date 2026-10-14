@@ -96,6 +96,14 @@ provider or tracing calls. To export, enable writing in Cell 2 and rerun Cells 2
 3, and 5. Upload only the packet bundle to the rating UI; keep the condition key
 restricted. Existing exports are never overwritten.
 
+Corrected staged bundles use the `reference-score-v13` cohort filenames for
+playground and remaining-test exports. These select each document's own saved
+G2 assessment and feedback and reject evidence IDs absent from the displayed
+reflection. The earlier `reference-score-v12` bundles reused the last document's
+G2 output across each cohort; do not use their affected G2 packets or ratings.
+Reassess affected G2 items using the corrected bundles. Generation artifacts
+are unchanged; no new provider calls are needed.
+
 From the `prebi_v1` project root, install the environment and optional Gemini integration:
 
 ```bash

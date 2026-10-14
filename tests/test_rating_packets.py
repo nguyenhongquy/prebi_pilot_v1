@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import hashlib
+import json
+from pathlib import Path
+
 import pytest
 import pandas as pd
 
@@ -110,6 +114,94 @@ def test_assessment_and_feedback_packets_are_blinded_and_task_specific() -> None
             rubric=rubric,
             human_feedback="Must stay out of Task B.",
         )
+
+
+@pytest.mark.parametrize("task", ["assessment_quality", "feedback_quality"])
+def test_packet_rejects_evidence_from_another_reflection(task: str) -> None:
+    with pytest.raises(ValueError, match="evidence.*displayed reflection"):
+        build_rating_packet(
+            task=task,
+            run=_run(),
+            reflection_segments=[{"segment_id": "other-segment", "order": 0, "text": "Other reflection."}],
+            rubric=RUBRIC_ARTIFACT.rubric.model_dump(mode="json"),
+        )
+
+
+def test_bundle_uses_each_documents_g2_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = load_experiment_config()
+    split_dir = tmp_path / "splits"
+    split_dir.mkdir()
+    config["paths"]["provisional_split_directory"] = str(split_dir)
+    config["dataset"]["prediction_split"] = "test"
+    monkeypatch.setattr(rating_packets_module, "load_experiment_config", lambda: config)
+    monkeypatch.setattr(
+        rating_packets_module, "_select_packet_cohort",
+        lambda cohort, **kwargs: ("synthetic-cohort", ["a", "b"], {"a": "Reference A", "b": "Reference B"}),
+    )
+    comparison_dir = tmp_path / "g1-g3" / "demo-runs"
+    comparison_dir.mkdir(parents=True)
+    rows = []
+    g2_runs = {}
+    for document_id in ("a", "b"):
+        rows.append({
+            "document_id": document_id, "segment_id": f"segment-{document_id}",
+            "candidate_id": f"candidate-{document_id}", "text": f"Reflection {document_id}",
+            "segment_order": 0, "scope_target": 1, "scope_target_known": True,
+            "target_situationserfassung": 2, "known_situationserfassung": True,
+            "target_analyse": 2, "known_analyse": True,
+            "target_konsequenzen": 2, "known_konsequenzen": True, "requires_review": False,
+        })
+        runs = {}
+        for condition in ("G1", "G2", "G3"):
+            run = _run()
+            run.update({
+                "run_id": f"{condition}-{document_id}",
+                "condition": condition,
+                "model_name": config["generation"]["model_name"],
+                "prompt_version": config["generation"]["expected_prompt_version"],
+                "repetition": config["generation"]["repetitions"],
+                "generation_parameters": {"temperature": config["generation"]["temperature"]},
+            })
+            run["output"]["assessment"]["component_assessments"][0]["evidence_segment_ids"] = [f"segment-{document_id}"]
+            run["output"]["feedback"]["strengths"][0].update({
+                "message": f"Strength {document_id}",
+                "evidence_segment_ids": [f"segment-{document_id}"],
+            })
+            runs[condition] = run
+        comparison = {
+            "document_id": document_id,
+            "rubric_id": config["generation"]["rubric_id"],
+            "rubric_version": config["generation"]["expected_rubric_version"],
+            "pairs": [{"G1": runs["G1"], "G3": runs["G3"]}],
+        }
+        (comparison_dir / f"comparison-{document_id}.json").write_text(json.dumps(comparison))
+        g2_path = tmp_path / f"g2-{document_id}.json"
+        g2_path.write_text(json.dumps(runs["G2"]))
+        g2_runs[document_id] = (g2_path, runs["G2"])
+    pd.DataFrame(rows).to_csv(split_dir / "provisional_test_modeling_wide.csv", index=False)
+    monkeypatch.setattr(rating_packets_module, "_load_author_disjoint_g2_runs", lambda *args, **kwargs: g2_runs)
+
+    bundle, key = rating_packets_module.build_development_rating_packet_bundle(tmp_path, write=True)
+    packets = {packet["packet_id"]: packet for packet in bundle["packets"]}
+    assert len(packets) == 14
+    for record in key["records"]:
+        if record["condition"] != "G2":
+            continue
+        document_id = record["document_id"]
+        assert record["run_id"] == f"G2-{document_id}"
+        assert record["source_artifact_sha256"] == hashlib.sha256(g2_runs[document_id][0].read_bytes()).hexdigest()
+        packet = packets[record["packet_id"]]
+        if record["task"] == "feedback_quality":
+            assert packet["output"]["strengths"][0]["text"] == f"Strength {document_id}"
+        else:
+            assert packet["output"]["dimensions"][0]["evidence_segment_ids"] == [f"segment-{document_id}"]
+    output_dir = tmp_path / "rating-packets" / "development"
+    assert json.loads((output_dir / "synthetic-cohort-rating-packets.json").read_text()) == bundle
+    assert json.loads((output_dir / "synthetic-cohort-condition-key.json").read_text()) == key
+    with pytest.raises(FileExistsError, match="overwrite"):
+        rating_packets_module.build_development_rating_packet_bundle(tmp_path, write=True)
 
 
 def test_reference_packet_is_independent_and_shares_stable_reflection_identity() -> None:
@@ -229,7 +321,7 @@ def test_playground_rating_packets_exclude_document_126(monkeypatch: pytest.Monk
         "playground", config={}
     )
 
-    assert cohort_id == "playground-author-188-reference-score-v12"
+    assert cohort_id == "playground-author-188-reference-score-v13"
     assert document_ids == ["3", "64", "188"]
     assert feedback == {"3": "feedback 3", "64": "feedback 64", "188": "feedback 188"}
 
