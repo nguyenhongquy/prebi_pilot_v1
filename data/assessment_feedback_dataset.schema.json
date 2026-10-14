@@ -87,6 +87,49 @@
       "maximum": 3,
       "multipleOf": 0.1
     },
+    "documentScore": {
+      "type": "number",
+      "enum": [0, 0.5, 1, 1.5, 2, 2.5, 3]
+    },
+    "documentDimensionConstraints": {
+      "required": ["score", "justification", "evidence_segment_ids", "intermediate_score_explanation"],
+      "properties": { "score": { "$ref": "#/$defs/documentScore" } },
+      "allOf": [{
+        "if": { "properties": { "score": { "enum": [0.5, 1.5, 2.5] } }, "required": ["score"] },
+        "then": { "properties": { "intermediate_score_explanation": { "type": "string", "pattern": "\\S" } } }
+      }]
+    },
+    "evidenceSynthesis": {
+      "type": "array", "minItems": 3, "maxItems": 3,
+      "items": { "$ref": "#/$defs/dimensionSynthesis" },
+      "allOf": [
+        { "contains": { "properties": { "dimension_id": { "const": "SW" } } } },
+        { "contains": { "properties": { "dimension_id": { "const": "UA" } } } },
+        { "contains": { "properties": { "dimension_id": { "const": "HA" } } } }
+      ]
+    },
+    "synthesisClaim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["interpretation", "evidence_refs"],
+      "properties": {
+        "interpretation": { "type": "string", "minLength": 1 },
+        "evidence_refs": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/identifier" } }
+      }
+    },
+    "dimensionSynthesis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dimension_id", "demonstrated_depth", "development", "integrative_coherence", "limitations", "uncertainty"],
+      "properties": {
+        "dimension_id": { "enum": ["SW", "UA", "HA"] },
+        "demonstrated_depth": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/synthesisClaim" } },
+        "development": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/synthesisClaim" } },
+        "integrative_coherence": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/synthesisClaim" } },
+        "limitations": { "type": "array", "items": { "$ref": "#/$defs/synthesisClaim" } },
+        "uncertainty": { "type": "array", "items": { "$ref": "#/$defs/synthesisClaim" } }
+      }
+    },
     "source": {
       "type": "object",
       "additionalProperties": false,
@@ -271,7 +314,15 @@
         "status": { "enum": ["independent", "adjudicated"] },
         "adjudication_ref": { "type": ["string", "null"] },
         "created_at": { "type": "string", "format": "date-time" }
-      }
+      },
+      "allOf": [{
+        "if": { "properties": { "rubric_version": { "const": "1.2.0" } }, "required": ["rubric_version"] },
+        "then": {
+          "properties": {
+            "dimension_scores": { "additionalProperties": { "properties": { "score": { "$ref": "#/$defs/documentScore" } } } }
+          }
+        }
+      }]
     },
     "feedbackImpliedScore": {
       "type": "object",
@@ -367,6 +418,7 @@
       "required": ["score", "justification", "evidence_segment_ids"],
       "properties": {
         "score": { "$ref": "#/$defs/score" },
+        "intermediate_score_explanation": { "type": ["string", "null"] },
         "justification": { "type": "string", "minLength": 1 },
         "evidence_segment_ids": {
           "type": "array",
@@ -419,6 +471,8 @@
         "rendered_prompt_sha256": { "type": ["string", "null"], "pattern": "^[A-Fa-f0-9]{64}$" },
         "rubric_artifact_sha256": { "type": ["string", "null"], "pattern": "^[A-Fa-f0-9]{64}$" },
         "rubric_version": { "type": "string", "minLength": 1 },
+        "pipeline_version": { "type": "string" },
+        "evidence_synthesis": { "$ref": "#/$defs/evidenceSynthesis" },
         "generation_parameters": { "type": "object" },
         "created_at": { "type": "string", "format": "date-time" },
         "analysis_source": { "enum": ["none", "predicted", "gold_candidate", "gold_adjudicated"] },
@@ -442,6 +496,22 @@
         "source_id": { "$ref": "#/$defs/identifier" }
       },
       "allOf": [
+        {
+          "if": { "properties": { "rubric_version": { "const": "1.2.0" } }, "required": ["rubric_version"] },
+          "then": {
+            "required": ["pipeline_version", "evidence_synthesis"],
+            "properties": {
+              "pipeline_version": { "const": "2.0.0" },
+              "assessment": {
+                "properties": {
+                  "dimensions": {
+                    "additionalProperties": { "$ref": "#/$defs/documentDimensionConstraints" }
+                  }
+                }
+              }
+            }
+          }
+        },
         {
           "if": { "properties": { "condition": { "const": "G1" } }, "required": ["condition"] },
           "then": { "properties": { "analysis_source": { "const": "none" }, "analysis_reference_id": { "type": "null" } } }
@@ -502,6 +572,10 @@
           }
         },
         "display_output_sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
+        "pipeline_version": { "type": "string" },
+        "synthesis_display_allowed": { "type": "boolean" },
+        "display_synthesis_sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
+        "evidence_synthesis": { "$ref": "#/$defs/evidenceSynthesis" },
         "displayed_reflection_sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
         "rubric_version": { "type": "string", "minLength": 1 },
         "human_feedback": { "type": "string", "minLength": 1 },
@@ -558,7 +632,25 @@
           }
         }
       ],
-      "description": "Do not include condition, model, gold labels, expert reference scores, or intermediate analysis in the annotator-facing packet. Human and LLM evaluators must reference the same immutable packet snapshot."
+      "if": {
+        "required": ["rubric_version", "task"],
+        "properties": { "rubric_version": { "const": "1.2.0" }, "task": { "enum": ["assessment_quality", "feedback_quality"] } }
+      },
+      "then": {
+        "required": ["pipeline_version", "evidence_synthesis", "display_synthesis_sha256", "synthesis_display_allowed"],
+        "properties": { "pipeline_version": { "const": "2.0.0" } },
+        "allOf": [
+          {
+            "if": { "properties": { "task": { "const": "assessment_quality" } } },
+            "then": { "properties": { "output": { "required": ["dimensions"], "properties": { "dimensions": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/documentDimensionConstraints" } } } } } }
+          },
+          {
+            "if": { "properties": { "task": { "const": "feedback_quality" } } },
+            "then": { "properties": { "synthesis_display_allowed": { "const": false } } }
+          }
+        ]
+      },
+      "description": "Do not include condition, model, gold labels, expert reference scores, or intermediate analysis in the annotator-facing packet. Synthesis is stored separately and hidden unless explicitly released for assessment quality under an approved protocol. Human and LLM evaluators must reference the same immutable packet snapshot."
     },
     "criterionRating": {
       "type": "object",

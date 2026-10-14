@@ -5,9 +5,10 @@ import json
 from langchain_core.prompts import PromptTemplate
 
 from reflection_assessment_feedback.experiment_config import load_experiment_config
-from reflection_assessment_feedback.models import GenerationRequest, HumanAnalysisContext
+from reflection_assessment_feedback.models import GenerationRequest
 from reflection_assessment_feedback.prompt_registry import PromptArtifact, resolve_prompt
 from reflection_assessment_feedback.rubric import RUBRIC_ARTIFACT
+from reflection_assessment_feedback.evidence_profiles import build_evidence_profiles
 
 _EXPERIMENT_CONFIG = load_experiment_config()
 _GENERATION_CONFIG = _EXPERIMENT_CONFIG["generation"]
@@ -29,7 +30,7 @@ SYSTEM_INSTRUCTIONS = PROMPT_ARTIFACT.text.rstrip()
 
 def prompt_components_for_request(request: GenerationRequest) -> tuple[PromptArtifact, ...]:
     components = [PROMPT_ARTIFACT]
-    if isinstance(request.analysis, HumanAnalysisContext):
+    if request.analysis is not None and request.analysis.source == "human":
         components.append(G3_SUPPLEMENTAL_ARTIFACT)
     elif request.analysis is not None:
         components.append(G2_SUPPLEMENTAL_ARTIFACT)
@@ -56,62 +57,13 @@ def build_prompt(request: GenerationRequest) -> str:
         },
     }
     supplemental_section = ""
-    if isinstance(request.analysis, HumanAnalysisContext):
-        human_segments = {
-            annotation.segment_id: annotation for annotation in request.analysis.segments
-        }
-        payload["reflection"]["segments"] = [
-            {
-                **segment.model_dump(mode="json"),
-                "human_annotation_candidates": [
-                    candidate.model_dump(mode="json")
-                    for candidate in human_segments[segment.segment_id].candidates
-                ],
-            }
-            for segment in request.document.segments
-        ]
-        candidate_count = sum(
-            len(segment.candidates) for segment in request.analysis.segments
-        )
-        reviewed_segment_count = sum(
-            any(candidate.requires_review for candidate in segment.candidates)
-            for segment in request.analysis.segments
-        )
-        multiple_candidate_segment_count = sum(
-            len(segment.candidates) > 1 for segment in request.analysis.segments
-        )
-        payload["segment_analysis"] = {
-            "source": "human",
-            "representation": "candidate_grain_observed_annotations",
-            "candidate_annotation_count": candidate_count,
-            "reviewed_segment_count": reviewed_segment_count,
-            "multiple_candidate_segment_count": multiple_candidate_segment_count,
-        }
-        supplemental_section = G3_SUPPLEMENTAL_ARTIFACT.text.rstrip()
-    elif request.analysis is not None:
-        annotations_by_id = {
-            annotation.segment_id: annotation for annotation in request.analysis.segments
-        }
-        payload["reflection"]["segments"] = [
-            {
-                **segment.model_dump(mode="json"),
-                "analysis": {
-                    "scope": annotations_by_id[segment.segment_id].scope,
-                    "component_bands": {
-                        dimension_id: "not_present" if band == "0" else band
-                        for dimension_id, band in annotations_by_id[
-                            segment.segment_id
-                        ].component_bands.items()
-                    },
-                },
-            }
-            for segment in request.document.segments
-        ]
-        payload["segment_analysis"] = {
-            "source": request.analysis.source,
-            "summary": request.analysis.model_dump(mode="json")["summary"],
-        }
-        supplemental_section = G2_SUPPLEMENTAL_ARTIFACT.text.rstrip()
+    profile = build_evidence_profiles(request)
+    if profile is not None and request.analysis is not None:
+        payload["evidence_profile"] = profile
+        supplemental_section = (
+            G3_SUPPLEMENTAL_ARTIFACT if request.analysis.source == "human"
+            else G2_SUPPLEMENTAL_ARTIFACT
+        ).text.rstrip()
 
     return PROMPT_TEMPLATE.format(
         supplemental_section=supplemental_section,

@@ -185,7 +185,7 @@ def main() -> None:
         from langchain_google_genai import ChatGoogleGenerativeAI
 
         generator = RubricGenerationRunner(
-            ChatGoogleGenerativeAI(model=generation["model_name"], temperature=generation["temperature"]),
+            ChatGoogleGenerativeAI(model=generation["model_name"]),
             enable_langsmith_tracing=provenance.get(
                 "langsmith_tracing", generation["enable_langsmith_tracing"]
             ),

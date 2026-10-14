@@ -109,7 +109,7 @@ class SegmentClassifierHybrid(SegmentClassifierGemini):
         cls,
         *,
         model_name: str,
-        temperature: float = 0.0,
+        temperature: float | None = None,
         baseline_predictor: Any = None,
         **options: Any,
     ) -> SegmentClassifierHybrid:
@@ -121,7 +121,9 @@ class SegmentClassifierHybrid(SegmentClassifierGemini):
             raise RuntimeError(
                 "Install the optional Gemini dependencies with `uv sync --extra gemini`."
             ) from error
-        model = ChatGoogleGenerativeAI(model=model_name, temperature=temperature)
+        model = ChatGoogleGenerativeAI(
+            model=model_name, **({"temperature": temperature} if temperature is not None else {})
+        )
         return cls(model=model, baseline_predictor=baseline_predictor, **options)
 
     def _prompt(

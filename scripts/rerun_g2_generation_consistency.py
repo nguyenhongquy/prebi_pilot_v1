@@ -21,7 +21,7 @@ from reflection_assessment_feedback.experiment_config import load_experiment_con
 from reflection_assessment_feedback.generation_consistency import consistency_tables, paired_consistency_differences
 from reflection_assessment_feedback.generator import RubricGenerationRunner, validate_output
 from reflection_assessment_feedback.judge_analysis import load_new_g2_judge_scores
-from reflection_assessment_feedback.models import GenerationOutput, GenerationRequest
+from reflection_assessment_feedback.models import DocumentGenerationOutput, GenerationOutput, GenerationRequest, parse_generation_output
 from reflection_assessment_feedback.prompt import build_prompt, prompt_components_for_request
 from scripts.evaluate_g2_direct_gbert import generate_validated, save_private
 
@@ -110,7 +110,7 @@ def prepare() -> dict:
                     raise ValueError("Historical repetition provenance mismatch")
                 if record["run"]["model_name"] != config["generation"]["model_name"]:
                     raise ValueError("Historical generator model differs")
-                output = GenerationOutput.model_validate(record["output"])
+                output = parse_generation_output(record["output"])
                 validate_output(historical_request, output)
                 append_scores(historical_rows, output, document_id, f"{condition} historical", repetition)
     protocol = {
@@ -145,14 +145,14 @@ def prepare() -> dict:
             "directory": directory, "requests": requests, "units": units, "historical_rows": historical_rows}
 
 
-def validate_new_record(record: dict, context: dict, document_id: str, repetition: int) -> GenerationOutput:
+def validate_new_record(record: dict, context: dict, document_id: str, repetition: int) -> GenerationOutput | DocumentGenerationOutput:
     expected = {"protocol_sha256": context["protocol_hash"], "document_id": document_id,
                 "condition": "G2", "repetition": repetition,
                 "request_sha256": context["protocol"]["request_hashes"][document_id],
                 "prompt_sha256": context["protocol"]["prompt_hashes"][document_id]}
     if any(record.get(key) != value for key, value in expected.items()):
         raise ValueError("Cached new G2 repetition provenance mismatch")
-    output = GenerationOutput.model_validate(record["output"])
+    output = parse_generation_output(record["output"])
     validate_output(context["requests"][document_id], output)
     return output
 
@@ -210,7 +210,7 @@ def main() -> None:
         from langchain_google_genai import ChatGoogleGenerativeAI
         generation = context["config"]["generation"]
         runner = RubricGenerationRunner(
-            ChatGoogleGenerativeAI(model=generation["model_name"], temperature=generation["temperature"]),
+            ChatGoogleGenerativeAI(model=generation["model_name"]),
             enable_langsmith_tracing=generation["enable_langsmith_tracing"],
         )
         count = 0

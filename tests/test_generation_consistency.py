@@ -65,7 +65,7 @@ def test_notebook_runner_resumes_without_new_calls(tmp_path, monkeypatch):
     import langchain_google_genai
     from reflection_assessment_feedback import EXPERT_RUBRIC
     from reflection_assessment_feedback.models import (
-        GenerationRequest, GenerationOutput, ReflectionDocument, ReflectionSegment,
+        GenerationRequest, DocumentGenerationOutput as GenerationOutput, ReflectionDocument, ReflectionSegment,
     )
     from reflection_assessment_feedback.generator import validate_output
     from reflection_assessment_feedback.prompt import build_prompt
@@ -79,8 +79,14 @@ def test_notebook_runner_resumes_without_new_calls(tmp_path, monkeypatch):
     ])
     request = GenerationRequest(condition='G1', document=document, rubric=EXPERT_RUBRIC)
     output = GenerationOutput.model_validate({
+        'evidence_synthesis': [{
+            'dimension_id': dimension,
+            **{field: [{'interpretation': 'Evidence', 'evidence_refs': ['s']}]
+               for field in ('demonstrated_depth', 'development', 'integrative_coherence')},
+            'limitations': [], 'uncertainty': [],
+        } for dimension in ('SW', 'UA', 'HA')],
         'assessment': {'component_assessments': [
-            {'dimension_id': dimension, 'band': 1.0, 'justification': 'Evidence', 'evidence_segment_ids': ['s']}
+            {'dimension_id': dimension, 'band': 1.0, 'justification': 'Evidence', 'evidence_segment_ids': ['s'], 'intermediate_score_explanation': None}
             for dimension in ('SW', 'UA', 'HA')
         ]},
         'feedback': {'strengths': [{'message': 'Strength', 'evidence_segment_ids': ['s']}]},
@@ -111,14 +117,18 @@ def test_notebook_runner_resumes_without_new_calls(tmp_path, monkeypatch):
                 raise ValueError('Invalid fake response')
             return FakeRun(output=output)
 
-    monkeypatch.setattr(langchain_google_genai, 'ChatGoogleGenerativeAI', lambda **options: object())
+    def fake_model(**options):
+        assert options == {'model': 'fake'}
+        return object()
+
+    monkeypatch.setattr(langchain_google_genai, 'ChatGoogleGenerativeAI', fake_model)
     monkeypatch.setattr(rate_limit, 'reserve_request_slot', lambda *args: 0)
     monkeypatch.setenv('GOOGLE_API_KEY', 'fake-test-key')
     namespace = {
         'RUN_GENERATION': True, 'APPROVE_EXTERNAL_PROCESSING': True,
         'APPROVE_CATEGORY_POLICY': True, 'APPROVE_G2_PROVENANCE': True,
         'MODES_TO_RUN': ('playground',), 'PROTOCOL_FROZEN_FOR_TEST': False,
-        'GENERATION_CONFIG': {'provider': 'google', 'model_name': 'fake', 'temperature': 0,
+        'GENERATION_CONFIG': {'provider': 'google', 'model_name': 'fake',
                               'minimum_request_interval_seconds': 1},
         'ENABLE_LANGSMITH_TRACING': False, 'canonical_hash': canonical_hash,
         'protocol': protocol, 'protocol_hash': canonical_hash(protocol),

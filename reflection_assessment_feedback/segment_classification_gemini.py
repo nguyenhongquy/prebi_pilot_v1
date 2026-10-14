@@ -121,7 +121,7 @@ class SegmentClassifierGemini:
         cls,
         *,
         model_name: str,
-        temperature: float = 0.0,
+        temperature: float | None = None,
         rubric=EXPERT_RUBRIC,
         enable_langsmith_tracing: bool = False,
         minimum_request_interval_seconds: float = 0.0,
@@ -133,7 +133,9 @@ class SegmentClassifierGemini:
             raise RuntimeError(
                 "Install the optional Gemini dependencies with `uv sync --extra gemini`."
             ) from error
-        model = ChatGoogleGenerativeAI(model=model_name, temperature=temperature)
+        model = ChatGoogleGenerativeAI(
+            model=model_name, **({"temperature": temperature} if temperature is not None else {})
+        )
         return cls(
             model=model,
             rubric=rubric,

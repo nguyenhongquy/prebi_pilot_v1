@@ -56,16 +56,16 @@ gradient_clip_norm = 1.0
 provider = "google"
 model_name = "gemini-3.5-flash-lite"
 repetitions = 1
-temperature = 0.0
 enable_langsmith_tracing = true
 prompt_id = "generation"
-expected_prompt_version = "1.4.0"
+expected_prompt_version = "2.0.0"
 g2_supplemental_prompt_id = "generation_g2_predicted_analysis"
-g2_supplemental_prompt_version = "1.0.0"
+g2_supplemental_prompt_version = "2.0.0"
 g3_supplemental_prompt_id = "generation_g3_observed_human_analysis"
-g3_supplemental_prompt_version = "1.0.0"
+g3_supplemental_prompt_version = "2.0.0"
 rubric_id = "unterrichtsreflexion-expert"
-expected_rubric_version = "1.0.0"
+expected_rubric_version = "1.2.0"
+pipeline_version = "2.0.0"
 minimum_request_interval_seconds = 7.5
 
 [llm_judge]

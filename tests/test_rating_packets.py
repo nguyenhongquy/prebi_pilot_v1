@@ -17,7 +17,9 @@ from reflection_assessment_feedback.rating_packets import (
     make_reflection_id,
 )
 from reflection_assessment_feedback.prompt_registry import resolve_prompt, render_prompt
-from reflection_assessment_feedback.rubric import RUBRIC_ARTIFACT
+from reflection_assessment_feedback.rubric_registry import resolve_rubric
+
+RUBRIC_ARTIFACT = resolve_rubric("unterrichtsreflexion-expert", "1.0.0")
 
 
 def _segments() -> list[dict[str, object]]:
@@ -131,6 +133,7 @@ def test_bundle_uses_each_documents_g2_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     config = load_experiment_config()
+    config["generation"]["expected_rubric_version"] = "1.0.0"
     split_dir = tmp_path / "splits"
     split_dir.mkdir()
     config["paths"]["provisional_split_directory"] = str(split_dir)
@@ -162,7 +165,7 @@ def test_bundle_uses_each_documents_g2_run(
                 "model_name": config["generation"]["model_name"],
                 "prompt_version": config["generation"]["expected_prompt_version"],
                 "repetition": config["generation"]["repetitions"],
-                "generation_parameters": {"temperature": config["generation"]["temperature"]},
+                "generation_parameters": {},
             })
             run["output"]["assessment"]["component_assessments"][0]["evidence_segment_ids"] = [f"segment-{document_id}"]
             run["output"]["feedback"]["strengths"][0].update({
@@ -283,7 +286,7 @@ def test_reference_packet_preserves_modelling_candidates_and_unknown_dimension_v
     assert all(item["requires_review"] for item in second_candidate)
 
 
-def test_modelling_band_summary_counts_known_bands_and_averages_positive_bands_only() -> None:
+def test_modelling_band_summary_counts_candidates_and_distinct_segments_without_means() -> None:
     annotations = [
         {"dimension_id": "SW", "level": "0", "known": True},
         {"dimension_id": "SW", "level": "1", "known": True},
@@ -293,6 +296,8 @@ def test_modelling_band_summary_counts_known_bands_and_averages_positive_bands_o
         {"dimension_id": "UA", "level": "2", "known": True},
         {"dimension_id": "HA", "level": "N", "known": False},
     ]
+    for index, annotation in enumerate(annotations):
+        annotation["segment_id"] = f"segment-{index}"
 
     summary = build_segment_annotation_summary(annotations)
     by_dimension = {item["dimension_id"]: item for item in summary["dimensions"]}
@@ -302,10 +307,10 @@ def test_modelling_band_summary_counts_known_bands_and_averages_positive_bands_o
     assert by_dimension["SW"]["band_counts"] == {"0": 1, "1": 1, "2": 0, "3": 1}
     assert by_dimension["SW"]["band_percentages"] == {"1": 50.0, "2": 0.0, "3": 50.0}
     assert by_dimension["SW"]["positive_band_count"] == 2
-    assert by_dimension["SW"]["mean_positive_band"] == 2.0
-    assert by_dimension["UA"]["mean_positive_band"] == 2.0
+    assert by_dimension["SW"]["distinct_assigned_segment_count"] == 2
+    assert by_dimension["UA"]["distinct_assigned_segment_count"] == 1
     assert by_dimension["HA"]["known_band_count"] == 0
-    assert by_dimension["HA"]["mean_positive_band"] is None
+    assert all("mean_positive_band" not in item for item in summary["dimensions"])
 
 
 def test_playground_rating_packets_exclude_document_126(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -321,7 +326,7 @@ def test_playground_rating_packets_exclude_document_126(monkeypatch: pytest.Monk
         "playground", config={}
     )
 
-    assert cohort_id == "playground-author-188-reference-score-v13"
+    assert cohort_id == "playground-author-188-rubric-1-2-0-pipeline-2"
     assert document_ids == ["3", "64", "188"]
     assert feedback == {"3": "feedback 3", "64": "feedback 64", "188": "feedback 188"}
 

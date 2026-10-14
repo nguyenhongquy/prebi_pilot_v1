@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from reflection_assessment_feedback import (
     EXPERT_RUBRIC,
     GenerationOutput,
+    DocumentGenerationOutput,
     GenerationRequest,
     HumanAnalysisCandidate,
     HumanAnalysisContext,
@@ -84,9 +85,20 @@ def _imperfect_human_context() -> HumanAnalysisContext:
     )
 
 
-def _output() -> GenerationOutput:
-    return GenerationOutput.model_validate(
+def _output() -> DocumentGenerationOutput:
+    return DocumentGenerationOutput.model_validate(
         {
+            "evidence_synthesis": [
+                {
+                    "dimension_id": dimension_id,
+                    **{
+                        field: [{"interpretation": "Synthetic text-grounded interpretation.", "evidence_refs": ["s1"]}]
+                        for field in ("demonstrated_depth", "development", "integrative_coherence")
+                    },
+                    "limitations": [],
+                    "uncertainty": [],
+                } for dimension_id in ("SW", "UA", "HA")
+            ],
             "assessment": {
                 "component_assessments": [
                     {
@@ -94,6 +106,7 @@ def _output() -> GenerationOutput:
                         "band": band,
                         "justification": "Synthetic justification.",
                         "evidence_segment_ids": ["s1"],
+                        "intermediate_score_explanation": None,
                     }
                     for dimension_id, band in (("SW", 2), ("UA", 1), ("HA", 0))
                 ]
@@ -324,28 +337,19 @@ def test_prompt_includes_supplemental_analysis_only_when_available() -> None:
         )
     )
 
-    assert "Berücksichtige ergänzende Analyse:" not in g1_prompt
-    assert "Berücksichtige ergänzende Analyse:" in g2_prompt
     g1_payload = json.loads(g1_prompt.split("Arbeitsgrundlage (JSON):\n", maxsplit=1)[1])
     g2_payload = json.loads(g2_prompt.split("Arbeitsgrundlage (JSON):\n", maxsplit=1)[1])
     assert "segment_analysis" not in g1_payload
     assert "analysis" not in g1_payload["reflection"]["segments"][0]
-    assert g2_payload["reflection"]["segments"][0]["analysis"] == {
-        "scope": "in_scope",
-        "component_bands": {"SW": "2", "UA": "1", "HA": "not_present"},
-    }
     assert "0" in g2_payload["rubric"]["dimensions"][0]["bands"]
     assert _analysis("predicted").segments[0].component_bands["HA"] == "0"
-    assert g2_payload["segment_analysis"]["source"] == "predicted"
-    assert "segments" not in g2_payload["segment_analysis"]
+    assert "evidence_profile" not in g1_payload
+    assert g2_payload["evidence_profile"]["source"] == "predicted"
     assert "high_band_segments" not in g2_prompt
-    assert g2_payload["segment_analysis"]["summary"][0]["positive_band_mean"] == 2.0
-    summary = {item["dimension_id"]: item for item in g2_payload["segment_analysis"]["summary"]}
-    assert "band_percentages" not in summary["SW"]
-    assert summary["SW"]["positive_band_percentages"] == {
-        "1": 0.0, "2": 100.0, "3": 0.0
-    }
-    assert summary["HA"]["positive_band_percentages"] is None
+    assert "positive_band_mean" not in g2_prompt
+    summary = {item["dimension_id"]: item for item in g2_payload["evidence_profile"]["dimensions"]}
+    assert summary["SW"]["distinct_segment_band_counts"] == {"A": 0, "B": 1, "C": 0}
+    assert summary["HA"]["distinct_assigned_segment_count"] == 0
 
 
 def test_g3_prompt_preserves_imperfect_human_annotation_candidates() -> None:
@@ -358,16 +362,14 @@ def test_g3_prompt_preserves_imperfect_human_annotation_candidates() -> None:
 
     prompt = build_prompt(request)
     payload = json.loads(prompt.split("Arbeitsgrundlage (JSON):\n", maxsplit=1)[1])
-    segment = payload["reflection"]["segments"][0]
-
-    assert len(segment["human_annotation_candidates"]) == 2
-    assert segment["human_annotation_candidates"][0]["component_bands"]["UA"] is None
-    assert segment["human_annotation_candidates"][0]["known_component_bands"]["UA"] is False
-    assert segment["human_annotation_candidates"][1]["scope"] == "out_of_scope"
-    assert all(item["requires_review"] for item in segment["human_annotation_candidates"])
-    assert payload["segment_analysis"]["representation"] == "candidate_grain_observed_annotations"
-    assert "führe Kandidaten nicht zu einem scheinbar eindeutigen Urteil zusammen" in prompt
-    assert "nicht als Band 0 oder N" in prompt
+    dimension = payload["evidence_profile"]["dimensions"][1]
+    passage = dimension["passages"][0]
+    assert len(passage["candidates"]) == 2
+    assert passage["candidates"][0]["status"] == "unknown"
+    assert passage["candidates"][0]["known"] is False
+    assert passage["candidates"][1]["status"] == "out_of_scope"
+    assert all(item["requires_review"] for item in passage["candidates"])
+    assert passage["conflicting_annotations"] is True
 
 
 def test_prompt_includes_in_scope_band_three_reflection_segments() -> None:
@@ -407,13 +409,9 @@ def test_prompt_includes_in_scope_band_three_reflection_segments() -> None:
             "segment_id": "s1",
             "order": 0,
             "text": "I reconsidered my approach and changed my next lesson plan.",
-            "analysis": {
-                "scope": "in_scope",
-                "component_bands": {"SW": "3", "UA": "2", "HA": "1"},
-            },
         }
     ]
-    assert payload["segment_analysis"]["summary"][0]["positive_band_mean"] == 3.0
+    assert payload["evidence_profile"]["dimensions"][0]["passages"][0]["candidates"][0]["label"] == "C"
 
 
 def test_prompt_joins_annotations_in_document_order() -> None:
@@ -444,14 +442,17 @@ def test_prompt_joins_annotations_in_document_order() -> None:
     payload = json.loads(prompt.split("Arbeitsgrundlage (JSON):\n", maxsplit=1)[1])
     segments = payload["reflection"]["segments"]
     assert [segment["segment_id"] for segment in segments] == ["s1", "s2"]
-    assert segments[0]["analysis"]["component_bands"] == {
-        "SW": "not_present", "UA": "2", "HA": "not_present"
-    }
-    assert segments[1]["analysis"]["scope"] == "out_of_scope"
+    passages = payload["evidence_profile"]["dimensions"][1]["passages"]
+    assert [item["segment_id"] for item in passages] == ["s1", "s2"]
+    assert passages[0]["candidates"][0]["label"] == "B"
+    assert passages[1]["candidates"][0]["status"] == "out_of_scope"
 
 
 def test_dimension_assessment_accepts_decimal_scores() -> None:
     result = _output().model_dump(mode="python")
+    result.pop("evidence_synthesis")
+    for item in result["assessment"]["component_assessments"]:
+        item.pop("intermediate_score_explanation")
     result["assessment"]["component_assessments"][0]["band"] = 2.1
 
     parsed = GenerationOutput.model_validate(result)
@@ -499,7 +500,7 @@ class FakeRunnable:
     def __init__(self) -> None:
         self.config: dict[str, Any] | None = None
 
-    def invoke(self, input: str, config: dict[str, Any] | None = None) -> GenerationOutput:
+    def invoke(self, input: str, config: dict[str, Any] | None = None) -> DocumentGenerationOutput:
         assert "Synthetic text." in input
         self.config = config
         return _output()
@@ -507,17 +508,19 @@ class FakeRunnable:
 
 class FakeChatModel:
     model = "fake-model"
-    temperature = 0.0
+    temperature: float | None = 0.0
 
     def __init__(self) -> None:
         self.runnable = FakeRunnable()
 
     def with_structured_output(self, schema: type) -> FakeRunnable:
-        assert schema is GenerationOutput
+        assert schema is DocumentGenerationOutput
         return self.runnable
 
 
-def test_shared_runner_adds_condition_trace_metadata() -> None:
+def test_shared_runner_adds_condition_trace_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LANGSMITH_TRACING", "false")
+    monkeypatch.setenv("LANGCHAIN_TRACING_V2", "false")
     model = FakeChatModel()
     runner = RubricGenerationRunner(model)
     request = make_generation_request(
@@ -538,6 +541,18 @@ def test_shared_runner_adds_condition_trace_metadata() -> None:
     assert model.runnable.config["metadata"]["condition"] == "G3"
     assert model.runnable.config["metadata"]["prompt_artifact_sha256"] == run.prompt_artifact_sha256
     assert model.runnable.config["metadata"]["rendered_prompt_sha256"] == run.rendered_prompt_sha256
+
+
+def test_runner_omits_unset_temperature_from_provenance(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in ("LANGSMITH_TRACING", "LANGCHAIN_TRACING_V2", "LANGCHAIN_TRACING"):
+        monkeypatch.setenv(name, "false")
+    model = FakeChatModel()
+    model.temperature = None
+    request = make_generation_request(condition="G1", document=_document(), rubric=EXPERT_RUBRIC)
+    run = RubricGenerationRunner(model).generate(request)
+    assert run.generation_parameters == {}
+    assert model.runnable.config is not None
+    assert model.runnable.config["metadata"]["generation_parameters"] == {}
 
 
 def test_runner_fails_closed_when_ambient_tracing_is_enabled(

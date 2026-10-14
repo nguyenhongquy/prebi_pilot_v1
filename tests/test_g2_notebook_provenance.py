@@ -27,13 +27,13 @@ def test_saved_g2_runs_reach_provenance_cell(tmp_path, reused):
         run_id="synthetic", repetition=1, model_name="fake", prompt_version=prompt.version,
         generation_parameters={}, prompt_artifact_sha256=prompt.sha256,
         rubric_artifact_sha256=RUBRIC_ARTIFACT.sha256, rendered_prompt_sha256="a" * 64,
-        prompt_components=[],
+        prompt_components=[], pipeline_version="2.0.0",
         output=SimpleNamespace(
             assessment=SimpleNamespace(component_assessments=[
-                SimpleNamespace(dimension_id=dimension, band=1, justification="synthetic", evidence_segment_ids=[])
+                SimpleNamespace(dimension_id=dimension, band=1, justification="synthetic", evidence_segment_ids=[], intermediate_score_explanation=None)
                 for dimension in ("SW", "UA", "HA")
             ]),
-            feedback=SimpleNamespace(strengths=[], weaknesses=[], suggestions=[]),
+            feedback=SimpleNamespace(strengths=[], weaknesses=[], suggestions=[]), evidence_synthesis=[],
         ),
     )
     generated_calls = []

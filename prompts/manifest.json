@@ -2,6 +2,36 @@
   "manifest_version": 1,
   "artifacts": [
     {
+      "id": "generation",
+      "version": "2.0.0",
+      "task": "generation",
+      "modality": "llm_prompt",
+      "status": "active",
+      "path": "generation/2.0.0/system.md",
+      "sha256": "a6afdaf75046b59127b01a3f60ca9b84629f1ce7e90f2db9d800726183ad30b4",
+      "variables": []
+    },
+    {
+      "id": "generation_g2_predicted_analysis",
+      "version": "2.0.0",
+      "task": "generation_g2_supplemental",
+      "modality": "llm_prompt_fragment",
+      "status": "active",
+      "path": "generation/2.0.0/g2-predicted-analysis.md",
+      "sha256": "2fe1ffe10bdd17ea4c924ee08865aa7e34181da2d0095715c721325e6360572f",
+      "variables": []
+    },
+    {
+      "id": "generation_g3_observed_human_analysis",
+      "version": "2.0.0",
+      "task": "generation_g3_supplemental",
+      "modality": "llm_prompt_fragment",
+      "status": "active",
+      "path": "generation/2.0.0/g3-observed-human-analysis.md",
+      "sha256": "383011ea4ca1f762fa94ec4a0cd2da8aaca97737fb24793c855c6ffac221b680",
+      "variables": []
+    },
+    {
       "id": "assessment_quality_human",
       "version": "0.4.0",
       "task": "assessment_quality",

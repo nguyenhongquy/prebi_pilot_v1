@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from reflection_assessment_feedback import EXPERT_RUBRIC, IntermediateAnalysis, make_generation_request
-from reflection_assessment_feedback.models import GenerationOutput, ReflectionDocument, ReflectionSegment, SegmentAnalysis
+from reflection_assessment_feedback.models import DocumentGenerationOutput as GenerationOutput, ReflectionDocument, ReflectionSegment, SegmentAnalysis
 from scripts import rerun_g2_generation_consistency as runner
 
 
@@ -20,14 +20,20 @@ def synthetic_context(tmp_path):
     ])
     request = make_generation_request(condition="G2", document=document, rubric=EXPERT_RUBRIC, analysis=analysis)
     output = GenerationOutput.model_validate({
+        "evidence_synthesis": [{
+            "dimension_id": dimension,
+            **{field: [{"interpretation": "Synthetic evidence", "evidence_refs": ["segment-one"]}]
+               for field in ("demonstrated_depth", "development", "integrative_coherence")},
+            "limitations": [], "uncertainty": [],
+        } for dimension in ("SW", "UA", "HA")],
         "assessment": {"component_assessments": [
-            {"dimension_id": dimension, "band": 1.0, "justification": "Synthetic evidence", "evidence_segment_ids": ["segment-one"]}
+            {"dimension_id": dimension, "band": 1.0, "justification": "Synthetic evidence", "evidence_segment_ids": ["segment-one"], "intermediate_score_explanation": None}
             for dimension in ("SW", "UA", "HA")
         ]},
         "feedback": {"strengths": [{"message": "Synthetic strength", "evidence_segment_ids": ["segment-one"]}]},
     })
     context = {
-        "config": {"generation": {"model_name": "fake-model", "temperature": 0,
+        "config": {"generation": {"model_name": "fake-model",
                                   "enable_langsmith_tracing": False, "minimum_request_interval_seconds": 1}},
         "protected": tmp_path, "directory": tmp_path / "experiment", "protocol_hash": "protocol-one",
         "protocol": {"request_hashes": {"first": runner.canonical_hash(request.model_dump(mode="json"))},
@@ -52,10 +58,12 @@ def test_new_g2_repeat_runner_resumes_without_provider_calls(tmp_path, monkeypat
     monkeypatch.setattr(runner, "generate_validated", calls)
     monkeypatch.setattr(runner, "analyze", Mock())
     monkeypatch.setattr(runner, "RubricGenerationRunner", lambda *args, **kwargs: object())
-    monkeypatch.setattr(langchain_google_genai, "ChatGoogleGenerativeAI", lambda **kwargs: object())
+    model_factory = Mock(return_value=object())
+    monkeypatch.setattr(langchain_google_genai, "ChatGoogleGenerativeAI", model_factory)
     monkeypatch.setattr(runner.sys, "argv", ["runner", "--phase", "generate", "--approve-external-processing"])
 
     runner.main()
+    model_factory.assert_called_once_with(model="fake-model")
     assert calls.call_count == 5
     paths = list((context["directory"] / "results").glob("*.json"))
     assert len(paths) == 5

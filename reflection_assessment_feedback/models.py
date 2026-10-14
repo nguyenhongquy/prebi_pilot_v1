@@ -1,14 +1,29 @@
 from __future__ import annotations
 
+from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 Condition = Literal["G1", "G2", "G3"]
 AnalysisSource = Literal["predicted", "human"]
 Scope = Literal["in_scope", "out_of_scope"]
 ComponentLabel = Literal["N", "0", "1", "2", "3"]
 DIMENSION_IDS = ("SW", "UA", "HA")
+
+
+class DocumentScore(float, Enum):
+    ZERO = 0
+    HALF = 0.5
+    ONE = 1
+    ONE_AND_HALF = 1.5
+    TWO = 2
+    TWO_AND_HALF = 2.5
+    THREE = 3
+
+
+DOCUMENT_SCORES = tuple(score.value for score in DocumentScore)
+PIPELINE_VERSION = "2.0.0"
 
 
 class StrictModel(BaseModel):
@@ -56,6 +71,9 @@ class Rubric(StrictModel):
     version: str = Field(min_length=1)
     glossary: dict[str, str] = Field(min_length=1)
     dimensions: list[RubricDimension] = Field(min_length=3)
+    level: Literal["document"] | None = Field(default=None, exclude_if=lambda value: value is None)
+    scale: dict[str, object] | None = Field(default=None, exclude_if=lambda value: value is None)
+    assessment_principles: dict[str, object] | None = Field(default=None, exclude_if=lambda value: value is None)
 
     @model_validator(mode="after")
     def validate_dimensions(self) -> Rubric:
@@ -246,5 +264,72 @@ class FeedbackComponents(StrictModel):
 
 
 class GenerationOutput(StrictModel):
+    """Historical generation contract; retains the original tenth-point scores."""
+
     assessment: Assessment
     feedback: FeedbackComponents
+
+
+class SynthesisClaim(StrictModel):
+    interpretation: str = Field(min_length=1)
+    evidence_refs: list[str] = Field(min_length=1)
+
+
+class DimensionSynthesis(StrictModel):
+    dimension_id: Literal["SW", "UA", "HA"]
+    demonstrated_depth: list[SynthesisClaim] = Field(min_length=1)
+    development: list[SynthesisClaim] = Field(min_length=1)
+    integrative_coherence: list[SynthesisClaim] = Field(min_length=1)
+    limitations: list[SynthesisClaim]
+    uncertainty: list[SynthesisClaim]
+
+
+class DocumentDimensionAssessment(StrictModel):
+    dimension_id: Literal["SW", "UA", "HA"]
+    band: DocumentScore
+    justification: str = Field(min_length=1)
+    evidence_segment_ids: list[str] = Field(min_length=1)
+    intermediate_score_explanation: str | None
+
+    @field_validator("band", mode="before")
+    @classmethod
+    def validate_score(cls, value: object) -> object:
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or value not in DOCUMENT_SCORES:
+            raise ValueError("Document score must be one of 0, 0.5, 1, 1.5, 2, 2.5, 3.")
+        return value
+
+    @model_validator(mode="after")
+    def validate_intermediate_explanation(self) -> DocumentDimensionAssessment:
+        if self.band in (0.5, 1.5, 2.5) and not (
+            self.intermediate_score_explanation and self.intermediate_score_explanation.strip()
+        ):
+            raise ValueError("Intermediate scores require an explanation of lower-anchor fulfillment and the higher-anchor gap.")
+        return self
+
+
+class DocumentAssessment(StrictModel):
+    component_assessments: list[DocumentDimensionAssessment] = Field(min_length=3, max_length=3)
+
+    @model_validator(mode="after")
+    def validate_dimensions(self) -> DocumentAssessment:
+        if {item.dimension_id for item in self.component_assessments} != set(DIMENSION_IDS):
+            raise ValueError("Assessment must contain SW, UA, and HA exactly once.")
+        return self
+
+
+class DocumentGenerationOutput(StrictModel):
+    evidence_synthesis: list[DimensionSynthesis] = Field(min_length=3, max_length=3)
+    assessment: DocumentAssessment
+    feedback: FeedbackComponents
+
+    @model_validator(mode="after")
+    def validate_dimensions(self) -> DocumentGenerationOutput:
+        if {item.dimension_id for item in self.evidence_synthesis} != set(DIMENSION_IDS):
+            raise ValueError("Synthesis must contain SW, UA, and HA exactly once.")
+        return self
+
+
+def parse_generation_output(value: object) -> GenerationOutput | DocumentGenerationOutput:
+    if isinstance(value, dict) and "evidence_synthesis" in value:
+        return DocumentGenerationOutput.model_validate(value)
+    return GenerationOutput.model_validate(value)

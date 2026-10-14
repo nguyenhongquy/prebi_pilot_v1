@@ -1,0 +1,1 @@
+Das evidence_profile enthält vorhergesagte Segmentzuordnungen. Nutze sie nur ergänzend zum vollständigen Originaltext. A/B/C sind kategoriale Segmentlabels, keine Dokumentwerte. Fehlzuordnungen sind möglich. Prüfe alle Aussagen an den Originalpassagen; leite weder Bewertung noch Feedback aus Häufigkeiten ab.

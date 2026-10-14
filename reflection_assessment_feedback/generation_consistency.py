@@ -6,6 +6,33 @@ from typing import Any
 import krippendorff
 import numpy as np
 import pandas as pd
+from sklearn.metrics import cohen_kappa_score
+
+from reflection_assessment_feedback.models import DOCUMENT_SCORES
+
+
+def document_score_agreement(reference: list[float], predicted: list[float]) -> dict[str, Any]:
+    """Descriptive distances use the scoring convention, not an interval-scale claim."""
+    if not reference or len(reference) != len(predicted):
+        raise ValueError("Paired non-empty document scores are required.")
+    if any(isinstance(score, bool) or score not in DOCUMENT_SCORES for score in reference + predicted):
+        raise ValueError("Document scores must be one of 0, 0.5, 1, 1.5, 2, 2.5, 3.")
+    differences = np.abs(np.array(reference) - np.array(predicted))
+    left = [DOCUMENT_SCORES.index(score) for score in reference]
+    right = [DOCUMENT_SCORES.index(score) for score in predicted]
+    kappa = (
+        float(cohen_kappa_score(left, right, labels=list(range(7)), weights="quadratic"))
+        if len(set(left + right)) > 1 else None
+    )
+    return {
+        "n": len(reference),
+        "mae": float(differences.mean()),
+        "exact_agreement": float(np.mean(differences == 0)),
+        "within_0_5_agreement": float(np.mean(differences <= 0.5)),
+        "weighted_cohen_kappa": kappa,
+        "weighted_cohen_kappa_status": "defined" if kappa is not None else "no_category_variation",
+        "measurement_note": "Ordinal anchors; numerical distances are descriptive scoring conventions.",
+    }
 
 
 def encode_score(score: float, band_mapping: dict[str, str] | None = None) -> str:

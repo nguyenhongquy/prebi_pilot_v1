@@ -12,7 +12,9 @@ from langsmith.utils import tracing_is_enabled
 
 from reflection_assessment_feedback.models import (
     GenerationOutput,
+    DocumentGenerationOutput,
     GenerationRequest,
+    PIPELINE_VERSION,
     ReflectionDocument,
 )
 from reflection_assessment_feedback.prompt import (
@@ -49,11 +51,15 @@ class GenerationRun:
     rendered_prompt_sha256: str
     prompt_components: list[dict[str, str]]
     rubric_artifact_sha256: str
-    output: GenerationOutput
+    output: DocumentGenerationOutput
     feedback_letter: str
+    pipeline_version: str = PIPELINE_VERSION
+    rubric_version: str = "1.2.0"
 
 
-def validate_output(request: GenerationRequest, output: GenerationOutput) -> None:
+def validate_output(request: GenerationRequest, output: GenerationOutput | DocumentGenerationOutput) -> None:
+    if request.rubric.version == "1.2.0":
+        output = DocumentGenerationOutput.model_validate(output.model_dump(mode="json"))
     dimensions = {dimension.dimension_id: dimension for dimension in request.rubric.dimensions}
     assessments = output.assessment.component_assessments
     assessment_ids = [assessment.dimension_id for assessment in assessments]
@@ -61,6 +67,11 @@ def validate_output(request: GenerationRequest, output: GenerationOutput) -> Non
         raise ValueError("Output must contain exactly one assessment for every rubric dimension.")
 
     segment_ids = {segment.segment_id for segment in request.document.segments}
+    if isinstance(output, DocumentGenerationOutput):
+        for synthesis in output.evidence_synthesis:
+            for field in ("demonstrated_depth", "development", "integrative_coherence", "limitations", "uncertainty"):
+                for claim in getattr(synthesis, field):
+                    _validate_evidence_ids(claim.evidence_refs, segment_ids)
     for assessment in assessments:
         dimension = dimensions[assessment.dimension_id]
         rubric_band_values = [int(band) for band in dimension.bands]
@@ -84,8 +95,13 @@ def _validate_evidence_ids(evidence_ids: list[str], segment_ids: set[str]) -> No
         raise ValueError("Output cites a segment ID that is not present in the input.")
 
 
-def output_for_review(output: GenerationOutput, document: ReflectionDocument) -> dict[str, Any]:
+def output_for_review(output: GenerationOutput | DocumentGenerationOutput, document: ReflectionDocument) -> dict[str, Any]:
     segment_orders = {segment.segment_id: segment.order for segment in document.segments}
+    if isinstance(output, DocumentGenerationOutput):
+        for synthesis in output.evidence_synthesis:
+            for field in ("demonstrated_depth", "development", "integrative_coherence", "limitations", "uncertainty"):
+                for claim in getattr(synthesis, field):
+                    _validate_evidence_ids(claim.evidence_refs, set(segment_orders))
     result = output.model_dump(mode="json")
     for assessment in result["assessment"]["component_assessments"]:
         _validate_evidence_ids(assessment["evidence_segment_ids"], set(segment_orders))
@@ -95,7 +111,7 @@ def output_for_review(output: GenerationOutput, document: ReflectionDocument) ->
     return result
 
 
-def render_feedback_letter(output: GenerationOutput) -> str:
+def render_feedback_letter(output: GenerationOutput | DocumentGenerationOutput) -> str:
     sections = (
         ("Stärken", output.feedback.strengths),
         ("Entwicklungsbedarfe", output.feedback.weaknesses),
@@ -193,7 +209,7 @@ class RubricGenerationRunner:
             for name in ("temperature", "top_p", "top_k", "max_output_tokens", "seed")
             if (value := getattr(self._model, name, None)) is not None
         }
-        runnable = self._model.with_structured_output(GenerationOutput)
+        runnable = self._model.with_structured_output(DocumentGenerationOutput)
         prompt_text = build_prompt(request)
         rendered_prompt_sha256 = hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()
         prompt_components = [
@@ -215,6 +231,7 @@ class RubricGenerationRunner:
                 "generation_parameters": generation_parameters,
                 "rubric_id": request.rubric.rubric_id,
                 "rubric_version": request.rubric.version,
+                "pipeline_version": PIPELINE_VERSION,
                 "prompt_version": PROMPT_VERSION,
                 "prompt_artifact_sha256": PROMPT_ARTIFACT.sha256,
                 "rendered_prompt_sha256": rendered_prompt_sha256,
@@ -230,8 +247,10 @@ class RubricGenerationRunner:
         )
         output = (
             result
-            if isinstance(result, GenerationOutput)
-            else GenerationOutput.model_validate(result)
+            if isinstance(result, DocumentGenerationOutput)
+            else DocumentGenerationOutput.model_validate(
+                result.model_dump(mode="json") if isinstance(result, BaseModel) else result
+            )
         )
         validate_output(request, output)
         return GenerationRun(
@@ -239,6 +258,7 @@ class RubricGenerationRunner:
             condition=request.condition,
             repetition=repetition,
             model_name=model_name,
+            rubric_version=request.rubric.version,
             generation_parameters=generation_parameters,
             prompt_version=PROMPT_VERSION,
             prompt_artifact_sha256=PROMPT_ARTIFACT.sha256,

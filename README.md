@@ -56,11 +56,34 @@ copy rather than maintaining a second independent copy.
 | 06    | [06_feedback_implied_score_pilot.ipynb](06_feedback_implied_score_pilot.ipynb) | Feedback-implied score pilot                             |
 | 07    | [07_rating_packet_export.ipynb](07_rating_packet_export.ipynb)                 | Staged playground/test export for Task A references and G1/G2/G3 quality packets |
 | 08    | [08_llm_judge_pilot.ipynb](08_llm_judge_pilot.ipynb)                           | Protected LLM assessment/feedback quality judging       |
-| 09    | [09_llm_judge_analysis.ipynb](09_llm_judge_analysis.ipynb)                     | Descriptive judge-result and optional human comparison  |
+| 09    | [09_llm_judge_analysis.ipynb](09_llm_judge_analysis.ipynb)                     | Current cross-batch G1/G2/G3 coverage and paired quality comparisons |
 | 10    | [10_generation_consistency.ipynb](10_generation_consistency.ipynb)             | Independent G1/G2/G3 repetitions and categorical agreement |
 
 - Training, provider calls, and exports retain their explicit switches.
 - Segment evaluation can run after inference independently of generation.
+
+For paired G1/G3 playground generation, set `GENERATION_COHORT = "playground"`
+in a setup cell before the loading cell of
+[03_generate_g1_g3.ipynb](03_generate_g1_g3.ipynb).
+This selects all test-split documents by the author of reflection 188, exactly
+as `INFERENCE_COHORT = "playground"` does in
+[02_segment_inference.ipynb](02_segment_inference.ipynb).
+The default is `remaining-test`. Restart the kernel when switching cohorts.
+The selected cohort ID is retained in saved comparisons, and final validation
+uses the selected cohort's expected size. Selecting a cohort does not itself
+make generation calls; provider execution remains in the later generation cell.
+
+For G2, use the same `GENERATION_COHORT = "playground"` setup setting in
+[04_generate_g2.ipynb](04_generate_g2.ipynb), or omit it for `remaining-test`.
+First save predictions for the matching `INFERENCE_COHORT` in
+[02_segment_inference.ipynb](02_segment_inference.ipynb) and matching G1/G3
+comparisons from [03_generate_g1_g3.ipynb](03_generate_g1_g3.ipynb).
+The loading cells make no provider calls. G2 provider approval defaults to false;
+set `APPROVE_EXTERNAL_PROCESSING = True` in a setup cell only after approval.
+LangSmith tracing remains required for both cohorts, using the approved EU
+endpoint and project. Cohort-specific counts drive validation without changing
+the shared experiment configuration. Restart the kernel when switching cohorts.
+Existing notebook outputs are historical and do not validate a new selection.
 
 The generation-consistency notebook defaults to local preflight and no provider calls.
 It freezes five repetitions, the generation prompts/rubric, saved G2 GBERT analysis,
@@ -114,9 +137,143 @@ Open a notebook in VS Code and select the workspace `.venv` Python kernel. Keep 
 
 Shared, non-secret experiment settings are in [config/experiment.toml](config/experiment.toml): data selectors and paths, classifier hyperparameters, generator model and repetitions, expected prompt/rubric versions, tracing preference, and evaluation seed. The notebooks load this file through `reflection_assessment_feedback.experiment_config`; persisted prediction and generation artifacts include its SHA-256 fingerprint. Keep API keys and `PREBI_DATA_ROOT` in the local `.env`, not in TOML. Runtime actions such as training, writing predictions, provider approval, and metric export remain explicit notebook switches.
 
-Versioned prompt artifacts and human coding protocols live under [prompts/](prompts/), indexed by [prompts/manifest.json](prompts/manifest.json). The active generation prompt is `generation@1.4.0`; its G2 predicted-analysis and G3 observed-human-analysis supplemental sections are separate versioned prompt fragments. Human assessment and feedback protocols remain pinned to assessment `0.3.0` and feedback `0.2.0`, with three-point ratings plus unable-to-judge. The German LLM-judge prompts are separately pinned to assessment `0.5.0` and feedback `0.3.0`. Both include matched teacher-educator feedback as an expert reference; the assessment judge also receives aggregate candidate-grain gold scope/band counts, missingness, review, and ambiguity summaries. These references inform judgments but are not treated as infallible gold labels or exact targets. Assessment criteria are Score-Rubric Fit, Evidence Support, and Justification Quality; feedback criteria are Correctness and Developmental Usefulness. Feedback-implied coding remains raw scores 0.0-3.0 in tenths, with human guide `0.1.0` and LLM prompt `0.2.0`. All rating instruments are development drafts requiring calibration before confirmatory use. `reflection_assessment_feedback.prompt_registry` verifies artifact hashes and renders templates with exact variable checking. The rubric is a separate versioned instrument under [rubrics/](rubrics/), not prompt text. New generation runs store prompt-component, rubric-artifact, and fully rendered prompt hashes; rating records likewise store prompt and input provenance.
+Versioned prompt artifacts and human coding protocols live under [prompts/](prompts/), indexed by [prompts/manifest.json](prompts/manifest.json). The active generation prompt is `generation@2.0.0`; its G2 predicted-analysis and G3 observed-human-analysis supplemental sections are separate versioned prompt fragments. Human assessment and feedback protocols remain pinned to assessment `0.3.0` and feedback `0.2.0`, with three-point ratings plus unable-to-judge. The German LLM-judge prompts are separately pinned to assessment `0.5.0` and feedback `0.3.0`. Both include matched teacher-educator feedback as an expert reference; the assessment judge also receives aggregate candidate-grain gold scope/band counts, missingness, review, and ambiguity summaries. These references inform judgments but are not treated as infallible gold labels or exact targets. Assessment criteria are Score-Rubric Fit, Evidence Support, and Justification Quality; feedback criteria are Correctness and Developmental Usefulness. Feedback-implied coding remains raw scores 0.0-3.0 in tenths, with human guide `0.1.0` and LLM prompt `0.2.0`. All rating instruments are development drafts requiring calibration before confirmatory use. [prompt_registry.py](reflection_assessment_feedback/prompt_registry.py) verifies artifact hashes and renders templates with exact variable checking. The rubric is a separate versioned instrument under [rubrics/](rubrics/), not prompt text. New generation runs store prompt-component, rubric-artifact, and fully rendered prompt hashes; rating records likewise store prompt and input provenance.
+
+### Document assessment pipeline 2.0.0
+
+The configured Gemini model uses fixed sampling defaults. Generation entry
+points do not pass a temperature, and provenance does not claim that
+`temperature=0` controlled sampling. Historical outputs retain their recorded
+parameters; the experiment-config fingerprint changes when this setting is
+removed. Fixed provider defaults do not guarantee deterministic outputs.
+
+New G1/G2/G3 generations use the unchanged authoritative
+[document rubric 1.2.0](rubrics/unterrichtsreflexion-expert/1.2.0.json).
+The classifiers, scope decision, training data, splits, checkpoints, and stored
+predictions are not revised. At the generation boundary,
+[evidence_profiles.py](reflection_assessment_feedback/evidence_profiles.py)
+maps internal 0/1/2/3 to not assigned/A/B/C; out-of-scope remains separate (`NA`).
+A is coarse evidence covering both non-demonstration and basic performance,
+not an adequate document score.
+
+Profiles contain original passages, distinct assigned-segment counts,
+A/B/C segment counts, and candidate annotation counts. Human alternatives,
+raw annotation provenance, conflicts, and uncertainty remain unresolved.
+Conflicted segments can occur in multiple band counts; candidate multiplicity
+is not independent corroboration. No segment mean, maximum, majority, or other
+numeric aggregation supplies a document assessment. Legacy analysis objects
+retain their historical computed summaries for serialization compatibility,
+but those summaries are excluded from new generation inputs.
+
+One structured model response contains three separate objects:
+
+- `evidence_synthesis`: SW/UA/HA qualitative claims about demonstrated depth,
+  development, coherence, limitations, and uncertainty. Each claim contains
+  `interpretation` and nonempty `evidence_refs` to original passages.
+  Numerical scores/bands are prohibited in synthesis instructions and have no
+  schema field. Reference validation proves existence, not substantive support;
+  semantic grounding and score-free prose still require output review.
+- `assessment`: holistic dimension judgments using exactly
+  `0, 0.5, 1, 1.5, 2, 2.5, 3`, evidence links, and justification.
+  `intermediate_score_explanation` is required (nullable at principal anchors,
+  nonblank at half steps), identifying the satisfied lower anchor, partial
+  higher-anchor characteristics, and missing requirements. Invalid decimals
+  are rejected, never rounded.
+- `feedback`: strengths, limitations, and actionable improvements grounded in
+  synthesis and assessment, not band frequencies.
+
+G1 synthesizes only the original reflection; G2/G3 additionally receive the
+predicted/human evidence profile. The rubric, synthesis requirements, output
+schema, and scoring rules are common across conditions. Runs record
+`pipeline_version=2.0.0` and `rubric_version=1.2.0`; new cohort filenames contain
+`rubric-1-2-0-pipeline-2`. Old outputs and immutable prompt/rubric registrations
+remain historical baselines, not relabelled new-instrument results.
+The normalized [dataset schema](data/assessment_feedback_dataset.schema.json)
+conditionally enforces the revised contract for rubric 1.2.0.
+
+The expert UI displays A/B/C labels and the complete document-rubric principles.
+Synthesis is stored and hashed separately from assessment/feedback and exported
+with `synthesis_display_allowed=false`. Independent reference scoring never
+receives generated outputs. Only an explicitly approved Task B packet may
+enable the separate synthesis panel; feedback-quality synthesis stays hidden.
+Existing task protocols and feedback-implied scoring are unchanged.
+
+[document_score_agreement](reflection_assessment_feedback/generation_consistency.py)
+reports MAE, quadratic weighted Cohen's kappa, exact agreement, and agreement
+within 0.5 on the seven permitted values. Numerical distances describe the
+scoring convention, not validated interval measurement. Historical tenth-point
+readers remain available; do not pool rubric versions. Frozen consistency
+experiments deliberately reject mismatched inputs/prompts/rubrics and need a
+new approved protocol rather than a bypass.
+
+No full-dataset regeneration is automatic. Calibrate the revised rubric on a
+small approved batch, decide whether to release synthesis for Task B, and freeze
+the new generation/evaluation protocol before running the experiment.
 
 The feedback-implied score pilot entry point is [06_feedback_implied_score_pilot.ipynb](06_feedback_implied_score_pilot.ipynb), backed by `reflection_assessment_feedback.feedback_implied_scoring`. Its preflight is local-only; the LLM execution cell defaults to `APPROVE_EXTERNAL_PROCESSING = False`. The R1 pilot contains six documents and infers scores separately for SW, UA, and HA. It records `not_inferable` rather than forcing a score, validates evidence offsets against the human feedback, rate-limits provider calls, and writes run records only under protected `PREBI_DATA_ROOT`.
+
+For quality judging, [08_llm_judge_pilot.ipynb](08_llm_judge_pilot.ipynb)
+now builds inputs directly from saved generation artifacts through
+[judge_batch.py](reflection_assessment_feedback/judge_batch.py), without requiring
+a complete rating-packet export or G2 generation. Its initial settings are:
+
+```python
+JUDGE_COHORT = "playground"  # alternatively "remaining-test"
+CONDITIONS_TO_JUDGE = ("G2",)  # any nonempty subset of G1/G2/G3
+TASKS_TO_JUDGE = ("assessment_quality", "feedback_quality")
+PILOT_ONLY = True
+APPROVE_EXTERNAL_PROCESSING = False
+APPROVE_FULL_BATCH = False
+```
+
+Run setup and local preflight first. The pilot selects the first document in the
+shared cohort order and includes every selected condition/task (four calls for
+the G1/G3 pilot, or two for the default G2 pilot). With `PILOT_ONLY=False`, all selected
+cohort documents are included; explicit full-batch approval is additionally
+required. Playground includes the entire author-188 group, including document
+126; human packet-export exclusions do not apply. G2 is loaded only if selected
+from the current notebook's protected `g2/demo-runs/g2-run-*.json` artifacts,
+not historical CLI author-disjoint evaluation batches. G2 validates prediction
+file hashes, current configuration, paired G1/G3 comparison hashes and cohort,
+and reconstructed rendered prompts against the original reflection and predicted
+analysis. It supports every configured repetition and does not require tracing
+to be disabled. Missing, stale or duplicate compatible runs fail explicitly.
+The full four-document playground G2 cohort has eight packets at one repetition.
+The remaining-test selector excludes the playground author through its shared
+cohort loader. No cell automatically expands to another cohort.
+
+Preflight validates current config/rubric/prompt provenance and original
+reflection snapshots. Multiple compatible G1/G3 artifacts fail explicitly:
+archive unwanted duplicates in protected storage rather than silently selecting
+a replicate. Teacher references come from the cohort loader, not old implied-score
+packets. Assessment judging additionally receives descriptive human candidate
+summaries; generated synthesis remains excluded from judge inputs.
+
+After approved provider execution, results are private and resumable. Stable
+packet IDs and a selection/input/prompt/source fingerprint prevent accidental
+reuse across revised batches. Completed results are revalidated and skipped;
+the notebook never regenerates source feedback. The final cells verify only
+selected results and report condition-by-criterion summaries. Historical
+notebook outputs remain intact and are explicitly marked as historical.
+
+For local comparisons, restart the kernel in
+[09_llm_judge_analysis.ipynb](09_llm_judge_analysis.ipynb), select
+`ANALYSIS_COHORT = "playground"` (or `"remaining-test"`) and
+`CONDITIONS_TO_COMPARE = ("G1", "G2", "G3")`, then run all cells.
+The notebook joins current judgments across separate condition/pilot/full-batch
+directories without provider calls or result-file writes. It validates input,
+source, teacher-reference, gold-summary, judge and prompt fingerprints against
+reconstructed current packets. Historical or stale packet IDs are not pooled.
+Coverage explicitly identifies missing and duplicate packets; duplicates are
+excluded rather than averaged or selected by recency. Displays include per-document
+ratings, available-case criterion summaries, matched-condition tables and paired
+win/tie/loss counts. Unable-to-judge responses are excluded from score comparisons.
+Paired units require every selected condition for the same document, repetition,
+task and criterion. These are descriptive ordinal quality comparisons, not
+document assessment scores, significance tests or independent observations.
+Existing historical displays remain saved but must not be read as current results.
+The historical CLI-specific and human-rating comparison routes are not included
+in this current-generation notebook.
 
 Never edit a registered protocol version or exported packet in place. Existing
 `0.1.0` quality packets retain their five-point scale and original criteria; the

@@ -3,6 +3,13 @@
   "artifacts": [
     {
       "id": "unterrichtsreflexion-expert",
+      "version": "1.2.0",
+      "status": "active",
+      "path": "unterrichtsreflexion-expert/1.2.0.json",
+      "sha256": "8ee5a852690a8b198d4bb408de7fffebdb7eb9414430a77d9f57059467a20fe0"
+    },
+    {
+      "id": "unterrichtsreflexion-expert",
       "version": "1.0.0",
       "status": "active",
       "path": "unterrichtsreflexion-expert/1.0.0.json",

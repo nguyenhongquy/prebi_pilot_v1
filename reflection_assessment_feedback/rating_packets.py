@@ -19,10 +19,11 @@ from reflection_assessment_feedback.development_cohorts import (
 )
 from reflection_assessment_feedback.prompt_registry import resolve_prompt
 from reflection_assessment_feedback.rubric_registry import resolve_rubric
+from reflection_assessment_feedback.models import DocumentGenerationOutput, PIPELINE_VERSION
 
 RatingTask = Literal["assessment_quality", "feedback_quality"]
-PLAYGROUND_PACKET_COHORT = "playground-author-188-reference-score-v13"
-REMAINING_TEST_PACKET_COHORT = "remaining-test-author-disjoint-g2-reference-score-v13"
+PLAYGROUND_PACKET_COHORT = "playground-author-188-rubric-1-2-0-pipeline-2"
+REMAINING_TEST_PACKET_COHORT = "remaining-test-author-disjoint-g2-rubric-1-2-0-pipeline-2"
 PLAYGROUND_PACKET_EXCLUDED_DOCUMENT_IDS = {"126"}
 REFERENCE_SCORE_PROTOCOL_ID = "reflection_reference_score_human"
 REFERENCE_SCORE_PROTOCOL_VERSION = "0.1.0"
@@ -162,6 +163,8 @@ def normalize_assessment(run: dict[str, Any]) -> dict[str, Any]:
                     "score": item.get("band", item.get("score")),
                     "justification": item.get("justification", ""),
                     "evidence_segment_ids": item.get("evidence_segment_ids", []),
+                    **({"intermediate_score_explanation": item["intermediate_score_explanation"]}
+                       if "intermediate_score_explanation" in item else {}),
                 }
                 for item in dimensions
             ]
@@ -174,6 +177,8 @@ def normalize_assessment(run: dict[str, Any]) -> dict[str, Any]:
                 "score": value["score"],
                 "justification": value["justification"],
                 "evidence_segment_ids": value.get("evidence_segment_ids", []),
+                **({"intermediate_score_explanation": value["intermediate_score_explanation"]}
+                   if "intermediate_score_explanation" in value else {}),
             }
             for dimension_id, value in dimensions.items()
         ]
@@ -274,11 +279,11 @@ def build_segment_annotation_summary(annotations: list[dict[str, Any]]) -> dict[
                 counts[band] += 1
         known_count = sum(counts.values())
         positive_count = counts["1"] + counts["2"] + counts["3"]
-        positive_mean = (
-            round((counts["1"] + 2 * counts["2"] + 3 * counts["3"]) / positive_count, 3)
-            if positive_count
-            else None
-        )
+        assigned_segments = {
+            annotation["segment_id"] for annotation in annotations
+            if annotation["dimension_id"] == dimension_id
+            and annotation["known"] is True and annotation["level"] in {"1", "2", "3"}
+        }
         dimensions.append(
             {
                 "dimension_id": dimension_id,
@@ -289,10 +294,14 @@ def build_segment_annotation_summary(annotations: list[dict[str, Any]]) -> dict[
                     band: round(counts[band] * 100 / positive_count, 1) if positive_count else 0.0
                     for band in ("1", "2", "3")
                 },
-                "mean_positive_band": positive_mean,
+                "distinct_assigned_segment_count": len(assigned_segments),
             }
         )
-    return {"aggregation_unit": "candidate_annotation", "dimensions": dimensions}
+    return {
+        "aggregation_unit": "candidate_annotation",
+        "counting_note": "Band percentages use assigned known candidate annotations as denominator, not independent segments or document performance. Alternative candidates are preserved.",
+        "dimensions": dimensions,
+    }
 
 
 def build_reference_rating_packet(
@@ -318,6 +327,8 @@ def build_reference_rating_packet(
         for dimension in rubric["dimensions"]
     ]
     reference_rubric = {"version": rubric["version"], "dimensions": dimensions}
+    if rubric.get("level") == "document":
+        reference_rubric = rubric
     packet = {
         "packet_id": str(uuid4()),
         "reflection_id": reflection_id,
@@ -361,6 +372,38 @@ def build_rating_packet(
         raise ValueError(f"Unsupported rating task: {task}")
     if task == "assessment_quality" and human_feedback is not None:
         raise ValueError("Historical feedback is not permitted on Task B packets.")
+    raw_output = run.get("output", run)
+    synthesis = raw_output.get("evidence_synthesis")
+    if rubric["version"] == "1.2.0":
+        if run.get("rubric_version") != "1.2.0" or run.get("pipeline_version") != PIPELINE_VERSION:
+            raise ValueError("Rubric 1.2.0 requires matching versioned pipeline output, not a historical run.")
+        if "output" in run:
+            DocumentGenerationOutput.model_validate({
+                **raw_output,
+                "assessment": {"component_assessments": [
+                    {key: value for key, value in item.items() if key != "evidence_segment_orders"}
+                    for item in raw_output["assessment"]["component_assessments"]
+                ]},
+            })
+        else:
+            normalized = normalize_assessment(run)
+            DocumentGenerationOutput.model_validate({
+                "evidence_synthesis": synthesis,
+                "assessment": {"component_assessments": [
+                    {
+                        "dimension_id": item["dimension_id"],
+                        "band": item["score"],
+                        "justification": item["justification"],
+                        "evidence_segment_ids": item["evidence_segment_ids"],
+                        "intermediate_score_explanation": item.get("intermediate_score_explanation"),
+                    } for item in normalized["dimensions"]
+                ]},
+                "feedback": {
+                    group: [{"message": item["text"], "evidence_segment_ids": item["evidence_segment_ids"]}
+                            for item in items]
+                    for group, items in normalize_feedback(run).items()
+                },
+            })
     if task == "assessment_quality":
         protocol_config = load_experiment_config()["prompts"]
         protocol_id = protocol_config["assessment_quality_human_id"]
@@ -381,6 +424,12 @@ def build_rating_packet(
         for item in items:
             if set(item["evidence_segment_ids"]) - segment_ids:
                 raise ValueError("Output evidence cites a segment outside the displayed reflection.")
+    if synthesis is not None:
+        for dimension in synthesis:
+            for field in ("demonstrated_depth", "development", "integrative_coherence", "limitations", "uncertainty"):
+                for claim in dimension[field]:
+                    if set(claim["evidence_refs"]) - segment_ids:
+                        raise ValueError("Synthesis evidence cites a segment outside the displayed reflection.")
 
     packet_id = str(uuid4())
     supported_versions = {"0.1.0", "0.2.0", "0.3.0", "0.4.0"} if task == "assessment_quality" else {"0.1.0", "0.2.0", "0.3.0"}
@@ -407,6 +456,12 @@ def build_rating_packet(
         "reflection": reflection_snapshot,
         "rubric": rubric,
         "output": output,
+        **({
+            "pipeline_version": run["pipeline_version"],
+            "evidence_synthesis": synthesis,
+            "display_synthesis_sha256": _sha256_json(synthesis),
+            "synthesis_display_allowed": False,
+        } if synthesis is not None else {}),
         **({"human_feedback": human_feedback} if task == "feedback_quality" and human_feedback is not None else {}),
         "condition_blinded": True,
         "displayed_context": displayed_context,
@@ -568,7 +623,7 @@ def _load_author_disjoint_g2_runs(
             or run.get("rubric_artifact_sha256") != rubric_sha256
             or run.get("repetition") != config["generation"]["repetitions"]
             or run.get("generation_parameters")
-            != {"temperature": config["generation"]["temperature"]}
+            != {}
         ):
             raise ValueError("Author-disjoint G2 generation provenance or configuration is invalid.")
         runs[document_id] = (generation_path, run)
@@ -637,7 +692,7 @@ def build_development_rating_packet_bundle(
                 and run.get("prompt_version") == config["generation"]["expected_prompt_version"]
                 and run.get("repetition") == config["generation"]["repetitions"]
                 and run.get("generation_parameters")
-                == {"temperature": config["generation"]["temperature"]}
+                == {}
                 for run in runs
             ):
                 comparison_candidates.setdefault(str(artifact["document_id"]), []).append(
