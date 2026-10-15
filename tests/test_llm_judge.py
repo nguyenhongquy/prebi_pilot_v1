@@ -75,6 +75,14 @@ def _rating(criterion_id: str) -> dict[str, Any]:
     }
 
 
+def test_assessment_prompt_override_rejects_feedback_packet() -> None:
+    with pytest.raises(ValueError, match="assessment-quality packet"):
+        run_quality_judge(
+            model=FakeChatModel({}), packet=_packet("feedback_quality"),
+            provider="test", model_name="fake", assessment_prompt_version="0.6.0",
+        )
+
+
 def test_judge_uses_task_schema_and_prompt_excludes_blinding_metadata() -> None:
     packet = _packet("assessment_quality")
     model = FakeChatModel({

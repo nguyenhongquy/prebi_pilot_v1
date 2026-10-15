@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 from uuid import uuid4
 
+from langchain_core.runnables import RunnableConfig
 from langsmith import Client, traceable, tracing_context
 from pydantic import BaseModel
 from langsmith.utils import tracing_is_enabled
@@ -29,7 +30,7 @@ LANGSMITH_EU_ENDPOINT = "https://eu.api.smith.langchain.com"
 
 
 class StructuredRunnable(Protocol):
-    def invoke(self, input: str, config: dict[str, Any] | None = None) -> Any: ...
+    def invoke(self, input: str, config: RunnableConfig | None = None) -> Any: ...
 
 
 class StructuredChatModel(Protocol):
@@ -133,11 +134,14 @@ class RubricGenerationRunner:
         model: StructuredChatModel,
         *,
         enable_langsmith_tracing: bool = False,
+        g3_supplemental_version: str | None = None,
     ) -> None:
         self._model = model
         self._enable_langsmith_tracing = enable_langsmith_tracing
+        self._g3_supplemental_version = g3_supplemental_version
 
     def generate(self, request: GenerationRequest, *, repetition: int = 1) -> GenerationRun:
+        prompt_components_for_request(request, g3_supplemental_version=self._g3_supplemental_version)
         if repetition < 1:
             raise ValueError("repetition must be a positive integer.")
         environment_tracing = any(
@@ -210,7 +214,7 @@ class RubricGenerationRunner:
             if (value := getattr(self._model, name, None)) is not None
         }
         runnable = self._model.with_structured_output(DocumentGenerationOutput)
-        prompt_text = build_prompt(request)
+        prompt_text = build_prompt(request, g3_supplemental_version=self._g3_supplemental_version)
         rendered_prompt_sha256 = hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()
         prompt_components = [
             {
@@ -218,9 +222,11 @@ class RubricGenerationRunner:
                 "version": artifact.version,
                 "sha256": artifact.sha256,
             }
-            for artifact in prompt_components_for_request(request)
+            for artifact in prompt_components_for_request(
+                request, g3_supplemental_version=self._g3_supplemental_version,
+            )
         ]
-        config: dict[str, Any] = {
+        config: RunnableConfig = {
             "run_name": f"rubric-generation-{request.condition.lower()}",
             "tags": ["direct-generation", request.condition],
             "metadata": {

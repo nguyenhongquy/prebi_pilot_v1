@@ -2,6 +2,156 @@
   "manifest_version": 1,
   "artifacts": [
     {
+      "id": "feedback_quality_llm_judge",
+      "version": "0.11.0",
+      "task": "feedback_quality",
+      "modality": "llm_prompt",
+      "status": "development_draft",
+      "path": "feedback_quality/llm/0.11.0.md",
+      "sha256": "530a4918025784e89a67a0eef2cb8dff00b243e2343ce5bb542368b8c6620da8",
+      "variables": ["packet_json"]
+    },
+    {
+      "id": "feedback_quality_llm_judge",
+      "version": "0.10.0",
+      "task": "feedback_quality",
+      "modality": "llm_prompt",
+      "status": "development_draft",
+      "path": "feedback_quality/llm/0.10.0.md",
+      "sha256": "aa95f3970e4ed32f588e83bfa50160361a7b3566c61024c62df242346bf8503c",
+      "variables": ["packet_json"]
+    },
+    {
+      "id": "feedback_reference_concern_extractor",
+      "version": "0.2.0",
+      "task": "reference_concern_extraction",
+      "modality": "llm_prompt",
+      "status": "development_draft",
+      "path": "feedback_quality/reference_concerns/0.2.0.md",
+      "sha256": "57101b47ce43d8cca0dfa8b1580a136ea757bab6e39c11ed2e9845ca4f9df609",
+      "variables": ["packet_json"]
+    },
+    {
+      "id": "feedback_quality_llm_judge",
+      "version": "0.9.0",
+      "task": "feedback_quality",
+      "modality": "llm_prompt",
+      "status": "development_draft",
+      "path": "feedback_quality/llm/0.9.0.md",
+      "sha256": "b209ed01c553aeab8258569a8462a48489a9d54f80a999b266c3807422af6468",
+      "variables": ["packet_json"]
+    },
+    {
+      "id": "feedback_reference_concern_extractor",
+      "version": "0.1.0",
+      "task": "reference_concern_extraction",
+      "modality": "llm_prompt",
+      "status": "development_draft",
+      "path": "feedback_quality/reference_concerns/0.1.0.md",
+      "sha256": "25764a604b6c58eb7826d2a50ded20137c901514c99929fb38bf57e33df47b9c",
+      "variables": ["packet_json"]
+    },
+    {
+      "id": "feedback_quality_llm_judge",
+      "version": "0.8.0",
+      "task": "feedback_quality",
+      "modality": "llm_prompt",
+      "status": "development_draft",
+      "path": "feedback_quality/llm/0.8.0.md",
+      "sha256": "38917b44c97b5c2be8e37ff3500eca9b80d7e034763a511425bf7223afcb86b8",
+      "variables": ["packet_json"]
+    },
+    {
+      "id": "feedback_quality_llm_judge",
+      "version": "0.7.0",
+      "task": "feedback_quality",
+      "modality": "llm_prompt",
+      "status": "development_draft",
+      "path": "feedback_quality/llm/0.7.0.md",
+      "sha256": "5259513cc0f4b70b5547b660c2b995edefb057dd260a3575bacebb8224228b1c",
+      "variables": ["packet_json"]
+    },
+    {
+      "id": "feedback_quality_llm_judge",
+      "version": "0.6.0",
+      "task": "feedback_quality",
+      "modality": "llm_prompt",
+      "status": "development_draft",
+      "path": "feedback_quality/llm/0.6.0.md",
+      "sha256": "9f15eb2f858ca5e7d26823c2b659861571ee8671cbc4708d3bb7efa2e6af86ed",
+      "variables": ["packet_json"]
+    },
+    {
+      "id": "feedback_quality_llm_judge",
+      "version": "0.5.0",
+      "task": "feedback_quality",
+      "modality": "llm_prompt",
+      "status": "development_draft",
+      "path": "feedback_quality/llm/0.5.0.md",
+      "sha256": "dd032725903be022edb4af725cc6cc44c01364300125fd6af83627406245a7ca",
+      "variables": ["packet_json"]
+    },
+    {
+      "id": "feedback_quality_llm_judge",
+      "version": "0.4.0",
+      "task": "feedback_quality",
+      "modality": "llm_prompt",
+      "status": "development_draft",
+      "path": "feedback_quality/llm/0.4.0.md",
+      "sha256": "dc3c34020849ec0de57d373b589086c8e4a61ed6538a9444f38e9df5c9e79287",
+      "variables": ["packet_json"]
+    },
+    {
+      "id": "assessment_quality_llm_judge",
+      "version": "0.8.0",
+      "task": "assessment_quality",
+      "modality": "llm_prompt",
+      "status": "development_draft",
+      "path": "assessment_quality/llm/0.8.0.md",
+      "sha256": "417b57ffcd27bfa53dbd9a7686eb662eb570b6b99080aa4ee85a092d3e616c37",
+      "variables": ["packet_json"]
+    },
+    {
+      "id": "generation_g3_observed_human_analysis",
+      "version": "2.2.0",
+      "task": "generation_g3_supplemental",
+      "modality": "llm_prompt_fragment",
+      "status": "development_draft",
+      "path": "generation/2.0.0/g3-dimension-assignments-2.2.0.md",
+      "sha256": "afeb68e18342579dd99ad4f14aca484772f2158d36d330872aecd207efb8ba18",
+      "variables": []
+    },
+    {
+      "id": "generation_g3_observed_human_analysis",
+      "version": "2.1.0",
+      "task": "generation_g3_supplemental",
+      "modality": "llm_prompt_fragment",
+      "status": "development_draft",
+      "path": "generation/2.0.0/g3-observed-human-analysis-2.1.0.md",
+      "sha256": "8c8a5f5822ea603ce3160b2f7e065edd5d88cdefc638ca6d960804fb13f030ca",
+      "variables": []
+    },
+    {
+      "id": "assessment_quality_llm_judge",
+      "version": "0.7.0",
+      "task": "assessment_quality",
+      "modality": "llm_prompt",
+      "status": "development_draft",
+      "path": "assessment_quality/llm/0.7.0.md",
+      "sha256": "b1d024441d943edf4821aac1717f549b816bfb1a02b4c7de344287b96c8c8261",
+      "variables": ["packet_json"]
+    },
+    {
+      "id": "assessment_quality_llm_judge",
+      "version": "0.6.0",
+      "task": "assessment_quality",
+      "modality": "llm_prompt",
+      "status": "development_draft",
+      "path": "assessment_quality/llm/0.6.0.md",
+      "sha256": "b6cfbb3f1107c8a4b4c839e34c3abbf2d179e7d27ae0ce521897a985445a2758",
+      "variables": ["packet_json"]
+    },
+    {
       "id": "generation",
       "version": "2.0.0",
       "task": "generation",

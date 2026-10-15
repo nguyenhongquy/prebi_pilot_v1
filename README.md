@@ -58,6 +58,7 @@ copy rather than maintaining a second independent copy.
 | 08    | [08_llm_judge_pilot.ipynb](08_llm_judge_pilot.ipynb)                           | Protected LLM assessment/feedback quality judging       |
 | 09    | [09_llm_judge_analysis.ipynb](09_llm_judge_analysis.ipynb)                     | Current cross-batch G1/G2/G3 coverage and paired quality comparisons |
 | 10    | [10_generation_consistency.ipynb](10_generation_consistency.ipynb)             | Independent G1/G2/G3 repetitions and categorical agreement |
+| 11    | [11_judge_stability.ipynb](11_judge_stability.ipynb)                           | Frozen-input judge repetitions, criterion stability and rubric review |
 
 - Training, provider calls, and exports retain their explicit switches.
 - Segment evaluation can run after inference independently of generation.
@@ -274,6 +275,718 @@ document assessment scores, significance tests or independent observations.
 Existing historical displays remain saved but must not be read as current results.
 The historical CLI-specific and human-rating comparison routes are not included
 in this current-generation notebook.
+
+### Frozen-input judge stability
+
+The revised assessment judge
+[`assessment_quality_llm_judge@0.6.0`](prompts/assessment_quality/llm/0.6.0.md)
+is available for prospective calibration. It evaluates visible justifications
+without requiring access to evaluator-only references, explains segment code
+semantics, applies document/half-step rules and defines cross-dimension quality
+judgments. The authoritative rubric and feedback judge are unchanged.
+Notebook 11 now defaults to **playground, assessment only, prompt 0.6.0,
+three repetitions, no imports**, with both provider approvals false:
+4 documents x 3 conditions x 3 repetitions = **36 fresh calls**.
+Inspect the frozen prompt version and rationales; review rubric overreach before
+locking the prompt for a separate remaining-test freeze. Do not select a prompt
+based on the preferred generator ranking. Revisions require a new immutable
+version, not editing a registered prompt. Local tests check wiring and contracts,
+not empirical calibration.
+
+Prompt selection is explicit per frozen study (`assessment_prompt_version`);
+`config/experiment.toml` remains pinned to the historical one-pass protocol.
+This avoids invalidating the full-config fingerprints of saved generations.
+The original frozen test study remains readable and resumable under its original
+prompt. Old judgments cannot be repetition 1 for the revised protocol:
+prompt overrides require `import_existing=False`. Do not pool prompt versions.
+
+[11_judge_stability.ipynb](11_judge_stability.ipynb) is a separate,
+approval-gated three-repeat study; the existing notebooks 08/09 remain the
+one-pass workflow. Select `STUDY_COHORT`, `STUDY_TASKS` and
+`STUDY_CONDITIONS`, then enable `FREEZE_STUDY` to snapshot the complete current
+cohort locally. Alternatively set `STUDY_DIRECTORY` to an existing manifest's
+directory and leave freezing disabled. Keep playground and remaining-test separate.
+
+The protected `llm-judge/stability-studies/<study-id>/manifest.json` embeds exact
+judge packets, original generation artifact contents, full rubric/reflections,
+teacher references, gold context, prompt/rendered text, configuration, eligible
+imported judgments and a reproducibly shuffled schedule. Its content hash is the
+study ID. Existing results qualify as judge repetition 1 only with matching
+input/source/configuration/prompt/model/parameter provenance; original timestamps,
+run IDs and import-file hashes are preserved. Ambiguous imports fail explicitly;
+resolve them or prospectively choose `IMPORT_EXISTING=False`. Repeating a
+freeze with identical inputs is idempotent. Changed source files create a
+different study, not a revision of the frozen one.
+
+Inspect the call projection before setting both `APPROVE_EXTERNAL_PROCESSING`
+and `APPROVE_FULL_BATCH` to true. At 18 documents, three conditions, two tasks
+and `JUDGE_REPETITIONS=3`, there are 324 planned judgments; 108 eligible existing
+judgments reduce new calls to 216. No feedback is regenerated. Every independent
+call receives the same frozen input without preceding judge answers. Completed
+slots resume without new calls under an exclusive lock and the shared rate
+limiter. A failure stops explicitly; rerunning retries that same slot, never
+adds a repetition. Results have separate `generation_repetition` and
+`judge_repetition` identities; duplicate files for a slot are errors. Storage is
+private, write-once and independent of later prediction-file changes.
+Judge configuration/prompt drift blocks execution rather than silently mixing
+protocols. Saved model aliases and execution timestamps do not certify an
+unchanged provider backend, particularly for imported judgments.
+
+Analysis requires no processing approval and does not use the live generation
+loaders. It reports expected/completed/missing judgments, inability to judge,
+full 1/2/3 distributions, per-packet medians/ranges, all-repeat exact agreement,
+varying/extreme-disagreement proportions and pairwise repetition agreement.
+Each proportion has an explicit scored/complete denominator. Paired condition
+orderings match document, generation repetition, task and criterion. Win/tie/loss
+counts, stable relationships, tie transitions and strict reversals are separate.
+The secondary median comparison requires every repetition to be scored for all
+selected conditions. These are descriptive ordinal comparisons; repeated
+judgments or criteria are not independent documents or independent experts.
+Do not extend beyond the frozen repetition count until a preferred result appears.
+
+### Alignment-only playground judge (0.7.0)
+
+The opt-in assessment judge `0.7.0` returns a separate categorical rubric-alignment
+decision for SW, UA and HA, not three numerical quality ratings. It checks each
+half-step's lower anchor, demonstrated upper-anchor features and actual remaining
+gap. Explanation adequacy is diagnostic, not another quality score and not an
+automatic reason to reject an otherwise defensible score. The document rubric,
+global prompt configuration and legacy assessment/feedback schemas are unchanged.
+
+Start with document 3 in all three conditions, using the exact inputs and generation
+sources from an existing frozen playground study:
+
+```bash
+python -m scripts.run_alignment_playground --source-study /protected/path/to/existing-study
+```
+
+This freezes three repetitions (nine calls, 27 dimension decisions) locally.
+Execution requires both `--approve-external-processing` and `--approve-full-batch`.
+Repeated `--document-id` flags select additional documents prospectively.
+Changed source-study cohort, missing document selections, malformed decisions,
+unknown evidence IDs and changed scores fail explicitly. Previous judgments are
+never imported. Results resume in protected write-once storage.
+
+Use `analyze_judge_study` or `analyze_alignment_study` for coverage, categorical
+distributions, per-dimension unanimity, pairwise exact agreement, direct
+defensible/not-defensible changes, transitions through questionable, and half-step
+check disagreement. Missing and unable-to-judge are distinct. Numeric medians and
+condition rankings from the legacy quality judge do not apply. Higher consistency
+alone does not demonstrate validity; review against the reflection and rubric,
+particularly document 3's HA anchor boundary, without selecting a preferred ranking.
+
+### Document 3 G3 generation diagnostic
+
+The opt-in G3 supplemental fragment `2.1.0` asks the generator to connect evidence
+across segment/dimension assignments and check that its final scores agree with
+its own qualitative synthesis. It adds no target scores and changes neither the
+document rubric nor the observed human annotations. The shared generation prompt
+and configured default G3 fragment remain `2.0.0`; run provenance records the
+revised component explicitly.
+
+```bash
+python -m scripts.regenerate_g3_playground --source-study /protected/path/to/existing-study
+```
+
+This verifies reconstruction of the original prompt hash and freezes document 3's
+exact reflection, annotations, rubric, revised prompt and model configuration in
+protected storage. The plan is three fresh G3 generations followed by one alignment
+judgment per generation (six calls in total), not a judge-repeatability study.
+Execution requires both `--approve-external-processing` and `--approve-full-batch`;
+generation uses approved EU tracing. Original artifacts are preserved. Private,
+write-once results resume under an exclusive lock; errors stop the batch rather
+than selecting or regenerating a preferred answer. Inspect all outputs, including
+synthesis and rationale, rather than treating a higher HA score as success.
+
+The first frozen document-3 diagnostic (`4d4bbf275a5cd5f2db36f8e598003ef49657cd37a19c0f935d2e45559ea5c0d4`)
+did **not** resolve the disagreement: all three generations returned SW 2, UA 2,
+HA 1; the alignment judge accepted SW/UA and rejected HA each time. The rationales
+still underused the connected terminology passage, with breadth/completeness
+requirements persisting in some outputs. This is a negative prompt-intervention
+result, not evidence that higher HA scores should be enforced or that the judge
+is independently validated. Keep the fragment opt-in; do not promote it as a fix.
+
+For a separate dimension-only diagnostic, add `--g3-supplemental-version 2.2.0`.
+The generator payload then contains only the unchanged rubric/reflection and
+`segment_dimension_assignments` (`segment_id`, `dimension_ids`). Assigned dimensions
+are the union across known, in-scope candidates; unknown or out-of-scope candidates
+contribute nothing. Empty lists do not exclude a passage as evidence. Levels,
+candidate identities, source metadata, counts, and conflict/review flags are not
+sent to the generator. The full original annotations remain in protected audit
+storage. This variant removes both levels and provenance, so a contrast with
+`2.1.0` cannot isolate the effect of either removal individually. It retains the
+same rubric, model, and cross-segment/anchor-consistency guidance, with no target
+score. Defaults and historical diagnostic artifacts remain unchanged.
+
+The first dimension-only document-3 diagnostic
+(`546b9be071dbdeb6785e37213b74b1e840a75fab331b3e2463e3e11adead467f`)
+returned HA scores of 1, 1.5, and 1.5 (SW/UA remained 2 throughout). The alignment
+judge rejected all three HA scores. For both half-steps it accepted the lower
+anchor and presence of upper-anchor features, but rejected the claimed remaining
+gap: alternatives for other classroom problems are not required for HA anchor 2.
+The intervention shifted two scores but did not resolve the rubric disagreement;
+three outputs on one document do not establish a causal effect. One judgment per
+output does not measure judge repeatability.
+
+### Human-reference feedback alignment pilot
+
+Feedback judge `0.4.0` is an opt-in experimental replacement for the two
+`0.3.0` quality ratings. Its outcome is **human-reference alignment**, not overall
+feedback quality or developmental usefulness. It returns `aligned`,
+`partially_aligned`, `misaligned`, or `unable_to_judge`, with exact reference
+quotes, generated feedback item references, and reflection evidence.
+
+Semantic agreement is sufficient; wording and exhaustive coverage need not
+match. Central omissions are coverage gaps, not factual errors, and alone cannot
+justify `misaligned`. Supported additions are allowed. A central contradiction or
+unsupported assertion must be checked against reflection and rubric; the human
+reference is fallible. Reference uncertainty is reported explicitly.
+Quote substrings, item indices and reflection segment IDs are validated locally.
+Quote validation permits whitespace-only equivalence (including nonbreaking
+spaces and line breaks), but no paraphrasing, case or punctuation changes.
+No assessment scores, gold annotations or generation syntheses enter this judge.
+
+```bash
+python -m scripts.run_feedback_alignment_playground
+```
+
+The local-only preflight freezes original document-3 G1/G2/G3 feedback and its
+human reference, with three fresh repetitions each (nine judge calls). Both
+`--approve-external-processing` and `--approve-full-batch` are required to execute.
+The same judge model and unset sampling configuration are retained. The study is
+private, write-once, and resumable; categorical verdict agreement and detailed
+comparisons are analyzed separately from historical numerical quality ratings.
+The shared feedback-judge default remains `0.3.0`; generation inputs and the
+paused remaining-test assessment study are unchanged.
+
+The document-3 pilot (`0fbbb5d7bf87ad260a637e436d4ae31b72326a6e1c3bb740b520eca8c49402dd`)
+completed all nine valid judgments. G1, G2, and G3 were each `partially_aligned`
+in all three repetitions (nine of nine within-output verdict pairs agreed).
+The recurring coverage gaps were selective, deeper causes analysis, multiple
+perspectives, and theoretical grounding emphasized by the reference. All nine
+judgments also questioned the reference's categorical assertion that action
+alternatives were absent, given the terminology passage in the reflection.
+Detailed comparisons were not identical: one G2 judgment flagged the description
+of its analyses as deep as a minor unsupported overstatement. The pilot
+demonstrates traceable comparisons, not discrimination between generators or
+independent validation of the judge's centrality decisions.
+
+Execution made ten provider calls for nine accepted results: one response with
+an unknown segment ID was preserved separately and replaced once. Another
+response was initially blocked only by nonbreaking-space quote differences;
+its unchanged output was recovered from the approved EU trace after verifying
+the frozen input/prompt hashes, and did not require a replacement call. Recovery
+and failure artifacts are retained privately alongside the study.
+
+For a single-judgment contrast on another playground document, use
+`--document-id 126 --judge-repetitions 1` with the same feedback pilot runner.
+This freezes three calls total (G1/G2/G3); it does not estimate repeatability.
+Document 126 was selected exploratorily for the largest historical inter-generator
+rating spread: correctness 2/3/3 and developmental usefulness 1/3/2 (G1/G2/G3).
+This purposive selection must not be interpreted as representative performance.
+
+The document-126 contrast (`60fd964d1633c5100771712b9d6508ef1281f2a9129b393cef83e52776004dd5`)
+completed exactly three calls, one per generator. All returned `partially_aligned`.
+All missed the reference's conceptual clarification of Bewertungskompetenz
+(ethical evaluation versus justified methodological judgment) and its request
+for further literature support. G1/G3 received credit for aligned didactic
+observations; G2's feedback focused on other supported aspects. Thus the new
+reference-alignment verdict did not reproduce the old quality-score ranking,
+although its detailed comparisons differentiated coverage. One call per output
+does not establish stability, and old/new outcomes measure different constructs.
+
+### Feedback issue-severity pilot
+
+Feedback judge `0.5.0` replaces the generic alignment verdict with separately
+typed issues and `major`, `minor`, `no_error`, or `unable_to_judge` overall.
+The highest issue severity determines the overall outcome. Substantive grounded
+contradictions and omissions of supported central reference concerns are major;
+local imprecision and secondary omissions are minor. Supported additions and
+disagreement with an unsupported reference statement are not errors.
+
+The output identifies central reference concerns and justifies centrality before
+checking coverage. Issues cite those concerns, exact text excerpts, relevant
+reflection segments, and the consequence for evaluation or development.
+Reference uncertainties are recorded separately. Concern links, quotes, segment
+IDs, major-omission rules and severity aggregation are validated locally.
+
+```bash
+python -m scripts.run_feedback_alignment_playground \
+  --document-id 3 --additional-document-id 126 \
+  --judge-repetitions 1 --feedback-prompt-version 0.5.0
+```
+
+This freezes six original outputs, with one judge call each and no generation.
+Both approval flags are required to execute. Prompt `0.5.0` remains opt-in;
+older prompts, saved results and the paused assessment batch are unchanged.
+The two documents are purposively selected playground cases, and one call per
+output cannot establish repeatability or representative generator performance.
+Issue counts should not be treated as interval scores: judges may group closely
+related concerns into one issue.
+
+The six-call pilot (`5f03d857d19f847899da7d5849c10730c80444b14d8cd8e02d2d1d611470e0ac`)
+completed without replacement calls. All six outputs received overall `major`,
+primarily for central omissions. Document 126: each generator missed the
+Bewertungskompetenz clarification and targeted literature support (two major
+issues each). Document 3: each missed deeper, focused, multi-perspective analysis
+and theoretical grounding (two major omissions each). G2 additionally received a
+major unsupported-claim issue for denying existing concrete action options; G3
+received a minor omission for insufficiently capturing goals/effects of options.
+All six results kept limitations of the human reference separate from generated
+errors. Overall categories still do not rank generators; issue descriptions are
+more informative. Single calls on selected cases are not a stability estimate.
+
+### Fidelity-first feedback pilot
+
+Opt-in feedback judge `0.6.0` evaluates factual and pedagogical appropriateness
+against the full reflection and rubric, with human feedback as a fallible expert
+perspective rather than a coverage target. It first checks all generated claims
+and recommendations, including document-wide counterevidence to alleged deficits.
+This is an instructed review order within one reference-aware call, not blinding.
+
+Missing reference concerns do not automatically become issues. An omission needs
+an independently necessary correction or prerequisite for the feedback's chosen
+focus, or must leave a materially misleading overall picture. A further helpful
+suggestion alone is insufficient. Major severity requires a concrete substantial
+consequence; contradictions and central omissions can be minor. Local imprecision
+and secondary omissions remain minor. Known major errors cannot be cancelled by
+uncertainty; local uncertainty is recorded separately from established issues.
+Version-specific validation preserves the historical `0.5.0` rules and records.
+Semantic necessity and materiality remain judge decisions, not locally proven facts.
+
+```bash
+python -m scripts.run_feedback_alignment_playground \
+  --document-id 3 --additional-document-id 126 \
+  --judge-repetitions 1 --feedback-prompt-version 0.6.0 \
+  --approve-external-processing --approve-full-batch
+```
+
+This rerates the same six original outputs without regeneration. Shared defaults
+and the paused remaining-test assessment study are unchanged.
+
+The six-call `0.6.0` pilot
+(`d5409400b896219405461e3253ff1ca65e13cd5e0a868a0879f8ef5c8ebaedf3`)
+completed with six accepted judgments and no replacement calls. Frozen packets
+and generation identities exactly matched the preceding `0.5.0` pilot.
+
+| Document | G1 | G2 | G3 |
+| --- | --- | --- | --- |
+| 3 | no_error | major | minor |
+| 126 | major | major | minor |
+
+For document 3, G1's focused visualization feedback was judged defensible without
+requiring every reference priority. G2's blanket claim that concrete action
+options were absent was a major contradiction; G3's demand for alternatives to
+all challenges was minor misleading emphasis. For document 126, all three
+received one omission issue concerning the distinction between justified
+methodological judgment and curricular Bewertungskompetenz. G1/G2 were major;
+G3 was minor because its other claims and development direction remained valid.
+The judge did not turn the separate literature suggestion into another error.
+Missing earlier versions were recorded as local uncertainty, not overall inability.
+
+These are one-call judgments, not validated generator rankings. In particular,
+the major/minor boundary for document 126 remains a human-calibration question:
+G1 explicitly endorses curricular alignment, but the claimed materiality difference
+between G2's omitted correction and G3's omitted correction needs closer review.
+The changed pattern shows the revised instrument no longer mechanically treats
+missing reference coverage as major; it does not establish that each verdict is right.
+
+### Reference-first feedback pilot
+
+Opt-in feedback judge `0.7.0` uses human feedback as the primary reference for
+central strengths, criticisms and development priorities. Reflection and rubric
+provide contextual checks, not an independent ideal-feedback assessment. Possible
+counterevidence and contested expert interpretations are documented as reference
+uncertainties rather than automatically treating reference-aligned claims as errors.
+Clear materially unsupported generated claims remain eligible issues.
+
+The existing issue types, exact quote and segment validation, semantic coverage,
+deduplication and materiality-based aggregation remain. Reference-first omissions
+and contradictions require supported reference-concern links and human excerpts;
+their severity is not mechanically fixed to major. Earlier prompt rules, saved
+results and shared defaults are preserved.
+
+```bash
+python -m scripts.run_feedback_alignment_playground \
+  --document-id 3 --additional-document-id 126 \
+  --judge-repetitions 1 --feedback-prompt-version 0.7.0 \
+  --approve-external-processing --approve-full-batch
+```
+
+This pilot rerates the same six original outputs, one call each, without
+regeneration. The remaining-test assessment study stays paused.
+
+The six-call pilot
+(`f792088b3b9b1d1ed3be9ef87e3105d245c56944b43ade3e6b5a17b947ab50f7`)
+completed with six accepted results and no replacement calls; all frozen packets
+and generation identities matched `0.6.0`. Completed resume validated the results
+without additional calls.
+
+| Document | Generator | Overall | Major issues | Minor issues |
+| --- | --- | --- | --- | --- |
+| 3 | G1 | major | 2 | 0 |
+| 3 | G2 | major | 1 | 0 |
+| 3 | G3 | major | 1 | 1 |
+| 126 | G1 | major | 1 | 1 |
+| 126 | G2 | major | 1 | 1 |
+| 126 | G3 | major | 1 | 1 |
+
+Document 3 issues concern missing reference priorities for focused, deeper,
+multi-perspective and theoretically grounded analysis. Judges grouped those
+priorities differently, so counts are not comparative scores. G3 additionally
+missed a secondary qualification about goals/effects of action alternatives.
+Crucially, G2's claim that alternatives were absent was no longer a contradiction
+issue: agreement with the disputed human diagnosis was retained as coverage, and
+the reflection's counterevidence was recorded as reference uncertainty. Its major
+verdict now concerns an omitted analysis-development priority, not that claim.
+
+For document 126, each output omitted the central Bewertungskompetenz clarification
+(major) and further literature support (minor). Earlier-version uncertainty was
+kept separate. These results demonstrate sensitivity to the intended reference-first
+construct, not validated accuracy, repeatability or generator ranking. All six
+being major does not imply they share the same problems or severity within category.
+
+### Two-stage frozen reference concerns
+
+Feedback judge `0.8.0` separates reference preprocessing from coverage evaluation.
+The inventory represents **documented lecturer priorities**, not independently
+established pedagogical ground truth. Existing `0.7.0` and older judgments remain
+readable through their original prompt/schema dispatch; no historical record is
+rewritten and shared experiment defaults are unchanged.
+
+1. **Extract a draft** using `feedback_reference_concern_extractor@0.1.0`. The
+   input whitelist contains only reflection ID, complete reflection segments,
+   lecturer feedback, rubric and rubric version. No generated feedback, assessment,
+   condition or annotation labels enter extraction. Distinct positive, critical
+   and developmental propositions receive consecutive `R1`, `R2`, ... in lecturer
+   excerpt order. Centrality follows the lecturer, not generated coverage.
+   Reflection/rubric checks contextualize priorities; contested interpretations
+   remain uncertain rather than becoming new requirements.
+2. **Review and explicitly approve** the draft. Extraction never approves it.
+   Approval is a separate write-once record naming the reviewer, timestamp and
+   exact draft/inventory hashes. A draft cannot be frozen into a new judge study.
+3. **Freeze and judge** with an explicit approved inventory selection for every
+   reflection. G1/G2/G3 and all repetitions share that selection. The study embeds
+   each inventory artifact once and uses references in its entries. Judgment
+   schema `2.0.0` stores `reference_inventory_ref` and `concern_coverage` without
+   duplicating static definitions. Every supplied concern receives exactly one
+   result; unknown/missing/duplicate IDs or changed static fields are rejected.
+   Existing issue taxonomy and severity logic remain separate from coverage.
+
+Inventories live outside the repository under
+`$PREBI_DATA_ROOT/llm-judge/reference-inventories/<inventory-id>/`.
+`draft.json` contains the source snapshot and hashes, rubric version, prompt text
+and artifact/rendered hashes, extractor model/parameters/revision, run ID, creation
+timestamp and inventory content hash. The directory ID hashes source inputs,
+extractor configuration and prompt artifact. Cache lookup is independent of
+generator condition and judge repetition. A lock prevents concurrent extraction;
+files are private, atomic and write-once. Loading verifies provenance and approval.
+Changed sources, rubric, prompt, model, parameters or explicit extraction revision
+produce a different inventory ID. Do not edit finalized files: reject a draft by
+not approving it, then deliberately revise the extractor configuration/prompt or
+use a new `--extraction-revision`. Never change inventories within a frozen batch.
+
+Example draft extraction from the existing playground's frozen inputs:
+
+```bash
+python -m scripts.reference_concerns extract \
+  --source-study "$PREBI_DATA_ROOT/llm-judge/stability-studies/f792088b3b9b1d1ed3be9ef87e3105d245c56944b43ade3e6b5a17b947ab50f7" \
+  --document-id 3 --document-id 126 --approve-external-processing
+```
+
+After inspecting each draft, approve it explicitly (no provider calls):
+
+```bash
+python -m scripts.reference_concerns approve \
+  --inventory-id INVENTORY_SHA256 --approved-by REVIEWER_NAME
+```
+
+Then select the two approved IDs to freeze a new study locally:
+
+```bash
+python -m scripts.run_feedback_alignment_playground \
+  --document-id 3 --additional-document-id 126 \
+  --feedback-prompt-version 0.8.0 --judge-repetitions 3 \
+  --reference-inventory-id 3=DOCUMENT_3_INVENTORY_SHA256 \
+  --reference-inventory-id 126=DOCUMENT_126_INVENTORY_SHA256
+```
+
+Both usual approval flags are still required to execute the feedback judge batch.
+Neither freezing nor judge execution performs extraction. Missing approval,
+source/config mismatch, invalid quotes or unknown segment IDs fail explicitly.
+
+`analyze_judge_study` returns `concern_coverage`, `decisions`, `issues` and
+`issue_counts` for the new version. The concern table retains type, centrality,
+reference support and inventory ID for stratified comparisons. Decisions report
+the total number of **central developmental** concerns and counts for each
+coverage category. The addressed proportion is
+`fully addressed / (fully addressed + partially addressed + missing)`;
+`unable_to_judge` is counted separately and excluded. A zero denominator yields
+no proportion, not zero. Missing judge runs are `not_run`, not failures of coverage.
+These coverage statistics describe documented priorities regardless of reference
+support; use the concern table to stratify supported/uncertain/unsupported concerns.
+Positive and critical concerns are not pooled into the developmental denominator.
+Issue counts by type/severity are separate; missing or uncertain coverage never
+automatically becomes a major issue. Grouped issue counts still are not comparable
+interval scores; fixed concern-level outcomes are the reproducible comparison unit.
+
+Two reference-only extractor calls produced the following **unapproved drafts**:
+
+| Reflection | Inventory ID | Concerns |
+| --- | --- | --- |
+| 3 | `9b249cca29de131678e853278469a1d077296f67c9ca8b89d84ec664f2c684dc` | 9 |
+| 126 | `450b44b4770dfb6f1b1f532e3dd0935cac486ec6a1eb3cf59f60b9c3f4fa2481` | 5 |
+
+For document 3, analytical depth (`R3`), multiple perspectives (`R5`), theoretical
+grounding (`R8`) and action alternatives (`R1`, with their elaboration in `R9`)
+remain distinct. For document 126, the Bewertungskompetenz clarification is
+central `R3`. The extractor marks that conceptual interpretation uncertain,
+while retaining the lecturer's intended distinction; approval should review this
+support classification rather than silently substituting the judge's own view.
+Document 3 also contains uncertain support judgments for the blanket absence of
+action alternatives and the broad criticism of analytical depth.
+
+Both drafts passed exact-excerpt, source-order and segment validation. Repeated
+cache lookup made no provider calls, and the existing six `0.7.0` judgments remained
+readable and unchanged. No inventory was approved and no `0.8.0` feedback judgment
+was run. The support labels and boundaries are drafts for human review, not
+validated ground truth.
+
+### Joint extraction and evaluability
+
+Extractor `0.2.0` assigns evaluability in the **same call** as reference extraction,
+using inventory schema `1.1.0`. Earlier `0.1.0`/schema `1.0.0` inventories remain
+unchanged and readable. There is no additional pedagogical assessment call.
+
+- `evaluable`: the current reflection, rubric and assumed general disciplinary,
+  subject-didactic and pedagogical knowledge suffice to interpret and assess the
+  documented lecturer priority. A standard need not be explicitly defined in the
+  reflection rubric. This does not authorize new ideal-feedback expectations.
+- `partially_evaluable`: only the frozen `evaluable_scope` is judged; the missing
+  information is named in `unavailable_context`. A current literature-development
+  request can be assessable while its comparison with a prior version is not.
+- `not_evaluable`: essential information was unavailable to the generator, such
+  as an earlier version, private conversation or undocumented observation.
+  `evaluable_scope` is null and missing context is explicit.
+
+Each concern also has `evaluability_rationale`. `reference_support` stays separate:
+an evaluable terminology criticism may still have an uncertain support judgment.
+The inventory is a record of lecturer priorities, not independently validated truth.
+Assumed general knowledge and the available-context policy are fixed in the
+versioned extractor prompt; personal course expectations are not silently assumed.
+
+Feedback judge `0.9.0` uses result schema `2.1.0`. It receives only the eligible
+concerns and must evaluate partial concerns strictly within `evaluable_scope`.
+The original complete inventory and hash remain frozen in protected storage.
+The judge cannot return coverage or linked issues for excluded IDs. Coverage
+`unable_to_judge` remains a separate local uncertainty within the eligible scope,
+not a reassignment of preprocessing evaluability.
+
+Analysis preserves all concerns, labelling excluded coverage
+`excluded_not_evaluable`. Central developmental denominators exclude these
+concerns as well as judge-level `unable_to_judge`; partially evaluable concerns
+count for their available scope only. Reports include `not_evaluable_count`,
+`central_developmental_not_evaluable`, and
+`central_developmental_partially_evaluable`. Issue severity is unchanged, and no
+missing concern automatically becomes a major issue.
+
+```bash
+python -m scripts.reference_concerns extract \
+  --source-study "$PREBI_DATA_ROOT/llm-judge/stability-studies/f792088b3b9b1d1ed3be9ef87e3105d245c56944b43ade3e6b5a17b947ab50f7" \
+  --document-id 3 --document-id 126 \
+  --extractor-prompt-version 0.2.0 --approve-external-processing
+```
+
+New drafts still require explicit review and approval. Use feedback prompt
+`0.9.0` with these inventories; feedback `0.8.0` continues to require the earlier
+schema and does not silently reinterpret it.
+
+Two authorized `0.2.0` extraction calls saved new, unapproved playground drafts:
+
+| Reflection | Inventory ID | Evaluable | Partially evaluable | Not evaluable |
+| --- | --- | --- | --- | --- |
+| 3 | `c336583645e211571bade18ea02aa8ee92df28edb42062b5b2be2849b0cc7025` | 10 | 0 | 0 |
+| 126 | `5daef3acb59940e40d24d3eaeda80b97192641a7ae9cf889f72102c7db1b8c2a` | 2 | 1 | 2 |
+
+Document 126's terminology concern (`R3`) is evaluable despite uncertain reference
+support. Its literature request (`R5`) is partially evaluable for the current
+argument; the historical comparison is excluded. Two positive statements about
+the unavailable earlier version are not evaluable. Document 3's current-text
+concerns are all evaluable, with the disputed absence of action alternatives
+remaining uncertain in reference support rather than being excluded.
+
+These are new drafts, not revisions in place: their IDs, grouping, concern types
+and centrality may differ from earlier drafts. Review those choices before approval;
+only a finalized inventory is fixed across generators/repetitions. No approval or
+new feedback judgment was performed.
+
+### Reference-first judge with explicit not-applicable coverage
+
+Feedback prompt `0.10.0` uses the reference-first `0.7.0` text as its base and adds
+the binding evaluability rules. The historical `0.7.0` artifact and its hashes are
+preserved rather than overwritten. Changes to its extraction/schema instructions
+are limited to consuming the fixed inventory, emitting separate concern coverage,
+and handling independent generated contradictions alongside unsupported claims.
+The new result schema is `2.2.0`; it uses approved inventory schema `1.1.0`.
+
+Unlike `0.9.0`, the new judge receives the complete inventory and must return
+exactly one result per ID, including `coverage: not_applicable` exactly for frozen
+`not_evaluable` concerns. Such entries have empty generated references and evidence,
+cannot be linked to any Issue, and do not contribute to severity or coverage-rate
+denominators. Analysis reports actual `not_applicable` outcomes separately through
+`not_applicable_count` and `central_developmental_not_applicable`; an unexecuted
+judgment is still `not_run`, not a fabricated judge outcome.
+
+For `evaluable`, judge the entire concern. For `partially_evaluable`, judge only
+the frozen `evaluable_scope`. `not_applicable` cannot replace `unable_to_judge` for
+an eligible concern. Evaluability and reference support remain independent.
+The rule limits reference comparisons, not checks of actually generated claims:
+independently supported unsupported claims or contradictions can still be Issues,
+with empty concern links and exact generated excerpts. Independent contradictions
+also require valid reflection evidence. Do not use this route to reintroduce
+excluded historical comparisons as errors.
+
+Select `--feedback-prompt-version 0.10.0` with the existing inventory-selection
+arguments after explicit draft review/approval. No extraction changes or new
+provider calls are required by this prompt/schema update. Earlier prompt/schema
+validation and saved results are unchanged.
+
+### Issues against uncertain lecturer priorities
+
+Feedback prompt `0.11.0` and result schema `2.3.0` permit an Issue, including major,
+against an evaluable central concern whose frozen `reference_support` is
+`uncertain`. This measures a consequential deviation from documented lecturer
+priorities, not independently confirmed disciplinary incorrectness. Missing
+coverage still does not automatically create an Issue.
+
+Every Issue now records `severity_basis`: `documented_reference_deviation` for
+linked reference Issues, or `independent_generated_error` for independently
+demonstrated generated errors with empty concern links. For uncertain references,
+the judge must also explain this limitation in its rationale and consequence and
+preserve the uncertainty rather than resolve it through unsupported assumptions.
+Analysis preserves this field in its Issues table.
+
+Unsupported reference concerns cannot justify reference-deviation Issues.
+Non-evaluable concerns remain `not_applicable` and cannot be linked to Issues;
+partially evaluable concerns are judged only within their frozen scope.
+The approved inventories need no changes or new extraction. Select
+`--feedback-prompt-version 0.11.0` with the existing inventory arguments to freeze
+a new study; historical prompts, inventories, judgments and validation remain
+unchanged.
+
+The `0.10.0` inventory pilot was stopped after one rejected provider response
+(document 126, G3) and zero accepted judgments. It attempted a major R3 omission
+against an uncertain reference, contrary to that version's supported-only rule.
+The response is preserved with the study; it has not been relabeled or accepted
+under the new methodology. No replacement or new-version calls were made as part
+of this policy update.
+
+The subsequent `0.11.0` pilot completed six fresh calls, one per original G1/G2/G3
+output for documents 3 and 126, with six accepted judgments and no replacement
+calls. Study ID:
+`05ee2f3622ba2fa976f8ef81baee56b60102e8e8e0e69865dab47c9dadc6a779`.
+The source packets and approved inventories exactly match the stopped `0.10.0`
+pilot. Resume was verified to make zero further judge calls.
+
+| Document | Generator | Overall | Major Issues | Minor Issues |
+| --- | --- | --- | --- | --- |
+| 3 | G1 | major | 3 | 0 |
+| 3 | G2 | major | 4 | 2 |
+| 3 | G3 | major | 4 | 1 |
+| 126 | G1 | major | 2 | 0 |
+| 126 | G2 | major | 2 | 0 |
+| 126 | G3 | major | 2 | 0 |
+
+For document 126, all three judgments mark R1/R2 `not_applicable`, and R3
+(terminology, uncertain support) and the evaluable scope of R5 (further literature
+support) `missing`, with major reference-deviation Issues for both. R4 is addressed
+for G1/G3 and missing for G2 without an additional Issue. Thus missing coverage
+does not automatically create an Issue.
+
+For document 3, all three judgments mark R5 (perspectives), R6 (focused selection),
+and R8 (theoretical grounding) missing. R10 (context, effects and goals of
+alternatives) is addressed for G1 and partially addressed for G2/G3. Central
+developmental coverage is therefore 1/3 fully addressed for G1 and 0/3 for G2/G3,
+with one partially addressed concern for each of G2/G3. These figures exclude
+critical-type concerns, which remain separately available in the coverage table.
+G1 groups R3 and R6 into a single omission Issue whereas G2/G3 do not; raw Issue
+counts therefore remain distinct from comparable fixed concern-level outcomes.
+All Issues in this pilot use `severity_basis=documented_reference_deviation`.
+One judgment per output does not establish judge stability or a generator ranking.
+
+### Remaining-test reference-aware alignment study
+
+The original generation pipeline remains the baseline: G3 includes dimension
+assignments and A/B/C levels, with its original `2.0.0` supplemental prompt.
+The alignment judge is reference-aware `0.7.0`, not the blind diagnostic `0.8.0`.
+No assessment regeneration or feedback-quality judgments are included.
+
+```bash
+python -m scripts.run_alignment_playground --cohort remaining-test
+```
+
+Despite the historical module name, `--cohort remaining-test` selects the full
+remaining-test cohort, with no document-3 filter or playground source required.
+Preflight checks current saved generation hashes, prompt components, human and
+predicted annotation inputs, cohort membership, rubric and reference coverage.
+It freezes 18 documents times G1/G2/G3: 54 assessments, three fresh judgments
+each (162 calls), with no imported judgments. The protocol and shuffled call
+schedule are frozen before execution. Add both `--approve-external-processing`
+and `--approve-full-batch` to execute/resume. Completed validated results are
+skipped. Keep this study separate from playground calibration and diagnostics.
+
+### Reference-blind document 3 G3 judge
+
+Assessment judge `0.8.0` retains the `0.7.0` alignment rules and schema but sends
+only `reflection`, `rubric`, and generated assessment `output`. Human reference
+feedback, gold annotations, generation syntheses, condition and source metadata
+are excluded from the rendered judge input, not merely discouraged in prose.
+Reference hashes in new records are null. Existing judge defaults and historical
+input hashes remain unchanged.
+
+```bash
+python -m scripts.run_blind_g3_playground --source-study /protected/path/to/document-3-alignment-study
+```
+
+This freezes seven existing G3 assessments: the original plus the three `2.1.0`
+and three dimension-only `2.2.0` generations. Each receives three fresh judgments
+(21 calls), with the same configured judge model and unset sampling parameters,
+in a reproducible shuffled order. No assessments are regenerated. Both
+`--approve-external-processing` and `--approve-full-batch` are needed to execute.
+Protected audit snapshots retain the prior reference-informed judgments; none of
+their rationales or references are sent to the blind judge. Saved judgments are
+validated and resumed without repeating completed calls.
+
+Analysis identifies the seven fixed outputs using `identity.output_variant`.
+The `generation_repetition` analysis key is an output index (1 through 7), not
+seven exchangeable generation repetitions: the true variant and repetition are
+retained in the source snapshot. Compare blind versus informed verdicts within
+each output. The original has three informed judgments; each diagnostic output
+has one. Differences are exploratory and do not independently validate the
+judge or isolate reference effects from ordinary judge variability.
+
+The completed document-3 reference-blind study
+(`8a55e5e4c9a43020b479a3d1b4ed2efded4191f26a3ae9b2a590691f2475b9dd`)
+contains all 21 planned judgments (63 dimension decisions). Each of the seven
+outputs was unanimous across three repetitions: SW/UA 2 were defensible, while
+HA 1 or 1.5 was not defensible. All verdicts matched their reference-informed
+counterparts. All six half-step checks accepted the lower anchor and upper
+features but rejected the remaining gap. The blind rationales independently
+identified the connected terminology passage as sufficient for HA anchor 2.
+Thus reference feedback/gold annotations are not necessary to reproduce this
+specific disagreement. This does not establish judge correctness or rule out
+reference influence on other documents; all seven outputs share one reflection.
+
+The optional protected rubric-review worksheet covers all assessment dimensions
+(54 assessments / 162 dimension cases for the primary cohort). Review against
+the frozen reflection, synthesis and rubric; distinguish legitimate development
+suggestions from unsupported scoring requirements, including theory, all-facet
+coverage, cross-dimension chains, extra completeness and half-point explanations.
+Findings require exact assessment/rubric excerpts, resolvable evidence IDs,
+score-impact decisions and reviewer rationale. Pending and ambiguous cases remain
+explicit. Validated review revisions are append-only; no prompt/rubric changes
+are made automatically. Worksheets, snapshots and text-bearing notebook outputs
+must remain protected and must not be committed.
 
 Never edit a registered protocol version or exported packet in place. Existing
 `0.1.0` quality packets retain their five-point scale and original criteria; the
