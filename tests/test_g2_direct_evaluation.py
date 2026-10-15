@@ -27,3 +27,17 @@ def test_generation_does_not_accept_persistently_invalid_output(tmp_path, monkey
     with pytest.raises(ValueError, match="Unknown evidence ID"):
         evaluation.generate_validated(SimpleNamespace(generate=generate), object(), 1, tmp_path / "state", 7.5)
     assert generate.call_count == 3
+
+
+def test_inference_cell_selection_uses_ids_not_positions():
+    notebook = {"cells": [
+        {"id": "heading", "cell_type": "markdown", "source": ["Not Python."]},
+        {"id": "load", "cell_type": "code", "source": ["documents = ['synthetic']"]},
+        {"id": "cohort-default", "cell_type": "code", "source": ["cohort = 'remaining-test'"]},
+    ]}
+    namespace = {"cohort": "playground"}
+    evaluation.execute_inference_cells(notebook, ("load",), namespace)
+    assert namespace["documents"] == ["synthetic"]
+    assert namespace["cohort"] == "playground"
+    with pytest.raises(ValueError, match="inference code cell"):
+        evaluation.execute_inference_cells(notebook, ("heading",), namespace)

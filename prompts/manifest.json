@@ -3,6 +3,16 @@
   "artifacts": [
     {
       "id": "feedback_quality_llm_judge",
+      "version": "0.12.0",
+      "task": "feedback_quality",
+      "modality": "llm_prompt",
+      "status": "development_draft",
+      "path": "feedback_quality/llm/0.12.0.md",
+      "sha256": "1bda84b0c29e21eeb2f639f19f4eb8f74b5a091dcfb6b002f23ca9d210232d67",
+      "variables": ["packet_json"]
+    },
+    {
+      "id": "feedback_quality_llm_judge",
       "version": "0.11.0",
       "task": "feedback_quality",
       "modality": "llm_prompt",
@@ -199,6 +209,16 @@
       "status": "development_draft",
       "path": "feedback_quality/human/0.3.0.md",
       "sha256": "fd28fbb3842e1ade8a8edab2917fca12fa368322bb3ed38f35377583ce7a2a67",
+      "variables": []
+    },
+    {
+      "id": "reflection_reference_score_human",
+      "version": "0.2.0",
+      "task": "reflection_reference_score",
+      "modality": "human_protocol",
+      "status": "development_draft",
+      "path": "reflection_reference_score/human/0.2.0.md",
+      "sha256": "1c66396814bf9fbbdde5bf69f6fdc5b2f020bcfd860c1ff6646269b64ceb6737",
       "variables": []
     },
     {

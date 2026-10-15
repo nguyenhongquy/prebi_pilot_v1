@@ -54,10 +54,10 @@ def expected_judge_metadata(packet: dict, identity: dict, config: dict, cohort: 
         "prompt_artifact_sha256": prompt.sha256,
         "experiment_config_sha256": experiment_config_sha256(),
     }
-    if task == "feedback_quality" and prompt.version in {"0.8.0", "0.9.0", "0.10.0", "0.11.0"}:
+    if task == "feedback_quality" and prompt.version in {"0.8.0", "0.9.0", "0.10.0", "0.11.0", "0.12.0"}:
         metadata["reference_inventory_ref"] = packet["reference_inventory_ref"]
         metadata["schema_version"] = {
-            "0.8.0": "2.0.0", "0.9.0": "2.1.0", "0.10.0": "2.2.0", "0.11.0": "2.3.0",
+            "0.8.0": "2.0.0", "0.9.0": "2.1.0", "0.10.0": "2.2.0", "0.11.0": "2.3.0", "0.12.0": "2.3.0",
         }[prompt.version]
     return metadata
 

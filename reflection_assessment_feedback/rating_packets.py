@@ -26,7 +26,7 @@ PLAYGROUND_PACKET_COHORT = "playground-author-188-rubric-1-2-0-pipeline-2"
 REMAINING_TEST_PACKET_COHORT = "remaining-test-author-disjoint-g2-rubric-1-2-0-pipeline-2"
 PLAYGROUND_PACKET_EXCLUDED_DOCUMENT_IDS = {"126"}
 REFERENCE_SCORE_PROTOCOL_ID = "reflection_reference_score_human"
-REFERENCE_SCORE_PROTOCOL_VERSION = "0.1.0"
+REFERENCE_SCORE_PROTOCOL_VERSION = "0.2.0"
 QUALITY_HUMAN_PROTOCOL_VERSIONS = {
     "assessment_quality": "0.4.0",
     "feedback_quality": "0.3.0",

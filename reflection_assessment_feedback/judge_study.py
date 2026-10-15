@@ -58,7 +58,7 @@ def freeze_judge_study(
     reference_inventory_refs: dict[str, dict] | None = None,
 ) -> Path:
     """Freeze packets, source artifacts, prompts and eligible repetition-1 judgments locally."""
-    single_feedback_pilot = feedback_prompt_version in {"0.4.0", "0.5.0", "0.6.0", "0.7.0", "0.8.0", "0.9.0", "0.10.0", "0.11.0"} and tasks == ("feedback_quality",)
+    single_feedback_pilot = feedback_prompt_version in {"0.4.0", "0.5.0", "0.6.0", "0.7.0", "0.8.0", "0.9.0", "0.10.0", "0.11.0", "0.12.0"} and tasks == ("feedback_quality",)
     if type(judge_repetitions) is not int or judge_repetitions < (1 if single_feedback_pilot else 2):
         raise ValueError("A stability study requires at least two judge repetitions.")
     if type(order_seed) is not int:
@@ -79,8 +79,8 @@ def freeze_judge_study(
         resolve_prompt(config["prompts"]["feedback_quality_llm_id"], feedback_prompt_version)
         if import_existing:
             raise ValueError("A prompt revision requires import_existing=False and fresh judgments.")
-    if reference_inventory_refs is not None and feedback_prompt_version not in {"0.8.0", "0.9.0", "0.10.0", "0.11.0"}:
-        raise ValueError("Frozen reference inventories require feedback prompt 0.8.0, 0.9.0, 0.10.0 or 0.11.0.")
+    if reference_inventory_refs is not None and feedback_prompt_version not in {"0.8.0", "0.9.0", "0.10.0", "0.11.0", "0.12.0"}:
+        raise ValueError("Frozen reference inventories require feedback prompt 0.8.0, 0.9.0, 0.10.0, 0.11.0 or 0.12.0.")
     metadata_config = copy.deepcopy(config)
     if assessment_prompt_version is not None:
         metadata_config["prompts"]["assessment_quality_llm_version"] = assessment_prompt_version
@@ -134,7 +134,7 @@ def freeze_judge_study(
                 candidates[record["packet_id"]].append((path, record))
     entries = []
     inventories = {}
-    if feedback_prompt_version in {"0.8.0", "0.9.0", "0.10.0", "0.11.0"} and (
+    if feedback_prompt_version in {"0.8.0", "0.9.0", "0.10.0", "0.11.0", "0.12.0"} and (
         reference_inventory_refs is None or set(reference_inventory_refs) != {
             key[p["packet_id"]]["document_id"] for p in packets
         }
@@ -218,7 +218,7 @@ def freeze_judge_study(
 
 def evaluation_packet(protocol: dict, entry: dict) -> dict:
     packet = copy.deepcopy(entry["packet"])
-    if protocol.get("feedback_prompt_version") in {"0.8.0", "0.9.0", "0.10.0", "0.11.0"}:
+    if protocol.get("feedback_prompt_version") in {"0.8.0", "0.9.0", "0.10.0", "0.11.0", "0.12.0"}:
         reference = packet["reference_inventory_ref"]
         record = protocol["reference_inventories"][reference["inventory_id"]]
         packet["reference_inventory"] = copy.deepcopy(record["inventory"])
@@ -241,7 +241,7 @@ def load_judge_study(directory: str | Path) -> dict:
             raise ValueError("Frozen generation source hash mismatch.")
     for entry in protocol["entries"]:
         packet = evaluation_packet(protocol, entry)
-        if protocol.get("feedback_prompt_version") in {"0.8.0", "0.9.0", "0.10.0", "0.11.0"}:
+        if protocol.get("feedback_prompt_version") in {"0.8.0", "0.9.0", "0.10.0", "0.11.0", "0.12.0"}:
             reference = packet["reference_inventory_ref"]
             approved = approved_inventory_for_packet(
                 directory.parents[2], reference, packet, entry["identity"]["document_id"],

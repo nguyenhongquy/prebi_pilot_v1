@@ -4,15 +4,19 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+import pandas as pd
 from pydantic import ValidationError
 
 import reflection_assessment_feedback.reference_inventory as inventories
 import reflection_assessment_feedback.judge_study as studies
+import reflection_assessment_feedback.judge_stability as stability
 from reflection_assessment_feedback.judge_artifacts import content_hash
 from reflection_assessment_feedback.judge_stability import analyze_judge_study
+from reflection_assessment_feedback.prompt_registry import resolve_prompt
 from reflection_assessment_feedback.llm_judge import (
     ApplicableConcernJudgeOutput, EvaluableConcernJudgeOutput, FrozenConcernJudgeOutput,
     ReferencePriorityJudgeOutput,
+    RefinedReferencePriorityJudgeOutput,
     build_judge_input, run_quality_judge,
     validate_frozen_concern_output,
 )
@@ -197,7 +201,7 @@ def test_versions_do_not_confuse_feedback_with_blind_assessment():
 
 
 @pytest.mark.parametrize("first_coverage", ["addressed", "unable_to_judge"])
-@pytest.mark.parametrize("version", ["0.8.0", "0.9.0", "0.10.0", "0.11.0"])
+@pytest.mark.parametrize("version", ["0.8.0", "0.9.0", "0.10.0", "0.11.0", "0.12.0"])
 def test_conditions_and_repetitions_reuse_approved_inventory(frozen, monkeypatch, first_coverage, version):
     original, root, _, calls, _ = frozen
     entries = studies.load_judge_study(original)["protocol"]["entries"]
@@ -216,7 +220,7 @@ def test_conditions_and_repetitions_reuse_approved_inventory(frozen, monkeypatch
             extra = copy.deepcopy(data["reference_concerns"][0])
             extra.update(concern_id=f"R{index}", concern_type=kind)
             data["reference_concerns"].append(extra)
-        if version in {"0.9.0", "0.10.0", "0.11.0"}:
+        if version in {"0.9.0", "0.10.0", "0.11.0", "0.12.0"}:
             data["schema_version"] = "1.1.0"
             for concern in data["reference_concerns"]:
                 concern.update(
@@ -234,7 +238,7 @@ def test_conditions_and_repetitions_reuse_approved_inventory(frozen, monkeypatch
         directory = extract_reference_inventory(
             root, source=source, config=ExtractorConfig(
                 provider="test", model_name="fake",
-                prompt_version="0.2.0" if version in {"0.9.0", "0.10.0", "0.11.0"} else "0.1.0",
+                prompt_version="0.2.0" if version in {"0.9.0", "0.10.0", "0.11.0", "0.12.0"} else "0.1.0",
             ),
             model=model, approve_external_processing=True,
         )
@@ -275,8 +279,8 @@ def test_conditions_and_repetitions_reuse_approved_inventory(frozen, monkeypatch
         ])
         if version == "0.9.0":
             data["schema_version"] = "2.1.0"
-        if version in {"0.10.0", "0.11.0"}:
-            data["schema_version"] = "2.3.0" if version == "0.11.0" else "2.2.0"
+        if version in {"0.10.0", "0.11.0", "0.12.0"}:
+            data["schema_version"] = "2.3.0" if version in {"0.11.0", "0.12.0"} else "2.2.0"
             data["concern_coverage"].append({
                 "concern_id": "R4", "coverage": "not_applicable",
                 "generated_references": [], "evidence_segment_ids": [],
@@ -302,14 +306,14 @@ def test_conditions_and_repetitions_reuse_approved_inventory(frozen, monkeypatch
     assert calls.call_count == len(entries)  # Two tasks originally; now feedback x two repetitions.
     assert extraction_calls.call_count == len(references)
     tables = analyze_judge_study(directory)
-    assert set(tables["decisions"].central_developmental_count) == {3 if version in {"0.9.0", "0.10.0", "0.11.0"} else 2}
-    assert set(tables["decisions"].central_developmental_not_evaluable) == {1 if version in {"0.9.0", "0.10.0", "0.11.0"} else 0}
-    if version in {"0.9.0", "0.10.0", "0.11.0"}:
+    assert set(tables["decisions"].central_developmental_count) == {3 if version in {"0.9.0", "0.10.0", "0.11.0", "0.12.0"} else 2}
+    assert set(tables["decisions"].central_developmental_not_evaluable) == {1 if version in {"0.9.0", "0.10.0", "0.11.0", "0.12.0"} else 0}
+    if version in {"0.9.0", "0.10.0", "0.11.0", "0.12.0"}:
         assert set(tables["decisions"].central_developmental_partially_evaluable) == {1}
         assert set(tables["concern_coverage"].loc[
             tables["concern_coverage"].concern_id == "R4", "coverage"
-        ]) == {"not_applicable" if version in {"0.10.0", "0.11.0"} else "excluded_not_evaluable"}
-    if version in {"0.10.0", "0.11.0"}:
+        ]) == {"not_applicable" if version in {"0.10.0", "0.11.0", "0.12.0"} else "excluded_not_evaluable"}
+    if version in {"0.10.0", "0.11.0", "0.12.0"}:
         assert set(tables["decisions"].not_applicable_count) == {1}
         assert set(tables["decisions"].central_developmental_not_applicable) == {1}
     if first_coverage == "addressed":
@@ -322,6 +326,272 @@ def test_conditions_and_repetitions_reuse_approved_inventory(frozen, monkeypatch
         assert tables["decisions"].central_developmental_addressed_proportion.isna().all()
     assert set(tables["decisions"].major_issues) == {0}
     assert set(tables["concern_coverage"].concern_type) == {"positive", "developmental"}
+    measurements = tables["measurements"]
+    assert list(measurements) == stability.FEEDBACK_MEASUREMENT_COLUMNS
+    assert len(measurements) == len(entries)
+    assert not measurements.duplicated(["packet_id", "judge_repetition"]).any()
+    assert set(measurements.central_actionable_n) == {2}
+    assert set(measurements.any_major_issue) == {False}
+    assert set(measurements.any_major_contradiction) == {False}
+    if first_coverage == "addressed":
+        assert set(measurements.central_full_coverage_rate) == {1.0}
+        assert set(measurements.central_missing_rate) == {0.0}
+    else:
+        assert measurements.central_full_coverage_rate.isna().all()
+        assert measurements.central_missing_rate.isna().all()
+
+
+def test_packet_measurements_and_concern_audit(monkeypatch):
+    source = reference_input_from_packet(packet(), "126")
+    template = evaluability_inventory(source)["reference_concerns"][0]
+    definitions = [
+        ("critical", "central", "uncertain", "evaluable", "missing"),
+        ("developmental", "central", "supported", "partially_evaluable", "partially_addressed"),
+        ("developmental", "central", "supported", "evaluable", "addressed"),
+        ("critical", "central", "supported", "evaluable", "unable_to_judge"),
+        ("positive", "central", "supported", "evaluable", "missing"),
+        ("critical", "secondary", "supported", "evaluable", "missing"),
+        ("critical", "central", "unsupported", "evaluable", "missing"),
+        ("developmental", "central", "supported", "not_evaluable", "not_applicable"),
+    ]
+    concerns, coverage = [], []
+    for index, (kind, centrality, support, evaluability, outcome) in enumerate(definitions, 1):
+        identifier = f"R{index}"
+        concerns.append({
+            **template, "concern_id": identifier, "concern_type": kind,
+            "centrality": centrality, "reference_support": support, "evaluability": evaluability,
+        })
+        coverage.append({
+            "concern_id": identifier, "coverage": outcome, "rationale": "Coverage rationale.",
+            "generated_references": [], "evidence_segment_ids": ["s1"],
+        })
+    protocol = {
+        "feedback_prompt_version": "0.12.0", "judge_repetitions": 2,
+        "reference_inventories": {"inventory": {"inventory": {"reference_concerns": concerns}}},
+        "entries": [{
+            "identity": {"document_id": "126", "condition": "G2"}, "generation_repetition": 3,
+            "packet": {"packet_id": "packet", "reference_inventory_ref": {
+                "inventory_id": "inventory", "inventory_sha256": "hash", "reflection_id": "126",
+            }},
+        }],
+    }
+    output = {
+        "concern_coverage": coverage, "overall_severity": "major", "rationale": "Summary.",
+        "reference_uncertainties": [],
+        "issues": [
+            {"issue_type": "central_omission", "severity": "major", "concern_ids": ["R1", "R2"]},
+            {"issue_type": "contradiction", "severity": "minor", "concern_ids": []},
+        ],
+    }
+    results = {("packet", 1): {"judgment": {"result": output}}}
+    monkeypatch.setattr(stability, "study_results", lambda directory: ({"protocol": protocol}, results))
+    tables = stability.extract_feedback_measurements("unused")
+    rows = tables["measurements"]
+    assert list(rows) == stability.FEEDBACK_MEASUREMENT_COLUMNS
+    first = rows.iloc[0]
+    assert (first.reflection_id, first.packet_id, first.condition) == ("126", "packet", "G2")
+    assert (first.generation_repetition, first.judge_repetition) == (3, 1)
+    assert first.central_actionable_n == 4
+    assert first.central_missing_n == 1
+    assert first.central_partial_n == 1
+    assert first.central_missing_rate == pytest.approx(1 / 3)
+    assert first.central_full_coverage_rate == pytest.approx(1 / 3)
+    assert first.central_addressed_n == 1
+    assert first.central_rate_denominator_n == 3
+    assert first.any_major_issue
+    assert not first.any_major_contradiction
+    # Excluded concerns (unable_to_judge, secondary, unsupported, not_evaluable) stay out of micro denominators.
+    micro = stability.summarize_micro_feedback_metrics(rows).iloc[0]
+    assert micro.central_denominator_n == 3 and micro.positive_denominator_n == 1
+    assert (micro.CMR, micro.CPCR, micro.CFCR) == (33.33, 33.33, 33.33)
+    assert micro.PRR == 0.0
+    assert (micro.MDI, micro.evaluated_feedbacks_n) == (100.0, 1)
+    pending = rows.iloc[1]
+    assert pending.central_actionable_n == 4
+    assert pending.overall_severity == "missing"
+    assert pending.positive_eligible_n == 1
+    assert pd.isna(pending.positive_addressed_n)
+    assert pd.isna(pending.positive_rate_denominator_n)
+    assert pd.isna(pending.positive_recognition_rate)
+    assert rows.loc[[1], ["central_missing_n", "central_partial_n", "central_missing_rate",
+                          "central_full_coverage_rate", "any_major_issue",
+                          "any_major_contradiction"]].isna().all().all()
+    audit = tables["concern_coverage"]
+    assert len(audit) == 16
+    judged = audit[audit.judge_repetition == 1].set_index("concern_id")
+    assert judged.central_actionable.sum() == 4
+    assert judged.in_coverage_rate_denominator.sum() == 3
+    assert judged.loc["R4", "coverage"] == "unable_to_judge"
+    assert judged.loc["R8", "coverage"] == "not_applicable"
+    assert judged.loc["R1", "linked_issue_indices"] == [0]
+    assert judged.loc["R1", "coverage_evidence_segment_ids"] == ["s1"]
+    assert judged.loc["R2", "evaluable_scope"] == template["evaluable_scope"]
+    assert not audit[audit.judge_repetition == 2].in_coverage_rate_denominator.any()
+    # Changing Issue grouping cannot change concern-based measures.
+    output["issues"] = [
+        {"issue_type": "central_omission", "severity": "major", "concern_ids": [c]}
+        for c in ("R1", "R2")
+    ]
+    regrouped = stability.extract_feedback_measurements("unused")["measurements"]
+    assert rows.equals(regrouped)
+    output["issues"].append({"issue_type": "contradiction", "severity": "major", "concern_ids": []})
+    assert stability.extract_feedback_measurements("unused")["measurements"].iloc[0].any_major_contradiction
+    output["issues"] = []
+    output["overall_severity"] = "no_error"
+    assert not stability.extract_feedback_measurements("unused")["measurements"].iloc[0].any_major_issue
+    for concern in concerns:
+        concern["reference_support"] = "unsupported"
+    empty = stability.extract_feedback_measurements("unused")["measurements"]
+    assert set(empty.central_actionable_n) == {0}
+    assert empty.iloc[0].central_missing_n == 0
+    assert empty.central_missing_rate.isna().all()
+    assert empty.central_full_coverage_rate.isna().all()
+
+
+@pytest.mark.parametrize("centrality", ["central", "secondary"])
+@pytest.mark.parametrize("support", ["supported", "uncertain", "unsupported"])
+@pytest.mark.parametrize("evaluability", ["evaluable", "partially_evaluable", "not_evaluable"])
+@pytest.mark.parametrize("outcome", ["addressed", "partially_addressed", "missing", "unable_to_judge"])
+def test_positive_recognition_eligibility(monkeypatch, centrality, support, evaluability, outcome):
+    concern = {
+        "concern_id": "R1", "concern_type": "positive", "centrality": centrality,
+        "reference_support": support, "evaluability": evaluability,
+    }
+    protocol = {
+        "feedback_prompt_version": "0.12.0", "judge_repetitions": 1,
+        "reference_inventories": {"i": {"inventory": {"reference_concerns": [concern]}}},
+        "entries": [{
+            "identity": {"document_id": "3", "condition": "G1"}, "generation_repetition": 1,
+            "packet": {"packet_id": "p", "reference_inventory_ref": {
+                "inventory_id": "i", "reflection_id": "3",
+            }},
+        }],
+    }
+    output = {
+        "overall_severity": "no_error", "rationale": "r", "reference_uncertainties": [], "issues": [],
+        "concern_coverage": [{
+            "concern_id": "R1",
+            "coverage": "not_applicable" if evaluability == "not_evaluable" else outcome,
+            "rationale": "r", "generated_references": [], "evidence_segment_ids": [],
+        }],
+    }
+    monkeypatch.setattr(stability, "study_results", lambda _: (
+        {"protocol": protocol}, {("p", 1): {"judgment": {"result": output}}},
+    ))
+    tables = stability.extract_feedback_measurements("unused")
+    row = tables["measurements"].iloc[0]
+    eligible = support != "unsupported" and evaluability != "not_evaluable"
+    denominator = eligible and outcome != "unable_to_judge"
+    assert row.positive_eligible_n == int(eligible)
+    assert row.positive_rate_denominator_n == int(denominator)
+    assert row.positive_addressed_n == int(denominator and outcome == "addressed")
+    if denominator:
+        assert row.positive_recognition_rate == float(outcome == "addressed")
+    else:
+        assert pd.isna(row.positive_recognition_rate)
+    assert row.central_actionable_n == 0
+    audit = tables["concern_coverage"].iloc[0]
+    assert audit.positive_eligible == eligible
+    assert audit.in_positive_rate_denominator == denominator
+
+
+def test_four_metric_macro_summary_missingness_and_repetitions():
+    rows = pd.DataFrame({
+        "condition": ["G1"] * 4, "reflection_id": ["1", "2", "3", "1"],
+        "generation_repetition": [1] * 4, "judge_repetition": [1, 1, 1, 2],
+        "positive_recognition_rate": [1.0, 0.5, None, 0.0],
+        "central_missing_rate": [0.0, 1.0, None, 0.0],
+        "central_full_coverage_rate": [1.0, 0.0, None, 1.0],
+        "any_major_issue": pd.array([True, False, None, False], dtype="boolean"),
+    })
+    summary = stability.summarize_feedback_metrics(rows).set_index("judge_repetition")
+    first = summary.loc[1]
+    assert first.reflections_n == 3
+    assert first.prr_reflections_n == 2
+    assert first.positive_recognition_rate == 0.75
+    assert first.central_missing_rate == 0.5
+    assert first.central_full_coverage_rate == 0.5
+    assert first.evaluated_feedbacks_n == 2
+    assert first.major_discrepancy_feedbacks_n == 1
+    assert first.major_discrepancy_incidence == 0.5
+    assert summary.loc[2].major_discrepancy_incidence == 0
+    assert summary.loc[2].positive_recognition_rate == 0
+    with pytest.raises(ValueError, match="one packet per reflection"):
+        stability.summarize_feedback_metrics(pd.concat([rows, rows.iloc[[0]]]))
+    rows.loc[:, "positive_recognition_rate"] = float("nan")
+    rows.loc[:, "any_major_issue"] = pd.NA
+    undefined = stability.summarize_feedback_metrics(rows)
+    assert undefined.positive_recognition_rate.isna().all()
+    assert undefined.major_discrepancy_incidence.isna().all()
+    assert set(undefined.evaluated_feedbacks_n) == {0}
+
+
+def micro_rows(**overrides):
+    data = {
+        "condition": ["G1", "G1", "G2", "G3"], "reflection_id": ["1", "2", "1", "1"],
+        "generation_repetition": [1] * 4, "judge_repetition": [1] * 4,
+        "positive_addressed_n": [3, 0, 1, 0], "positive_rate_denominator_n": [4, 1, 3, 0],
+        "central_missing_n": [1, 0, 2, 0], "central_partial_n": [1, 0, 1, 0],
+        "central_addressed_n": [2, 1, 0, 0], "central_rate_denominator_n": [4, 1, 3, 0],
+        "any_major_issue": [True, True, False, False],
+    }
+    data.update(overrides)
+    frame = pd.DataFrame(data)
+    for column in [c for c in data if c.endswith("_n")]:
+        frame[column] = frame[column].astype("Int64")
+    frame["any_major_issue"] = frame["any_major_issue"].astype("boolean")
+    return frame
+
+
+def test_micro_metrics_pool_counts_before_division():
+    summary = stability.summarize_micro_feedback_metrics(micro_rows()).set_index("Generator")
+    assert list(summary.reset_index())[:8] == [
+        "Generator", "generation_repetition", "judge_repetition", "PRR", "CMR", "CPCR", "CFCR", "MDI",
+    ]
+    g1 = summary.loc["G1"]
+    # Micro PRR = 3/5 = 60.00; the macro mean of 0.75 and 0.0 would be 37.5.
+    assert (g1.PRR, g1.positive_addressed_n, g1.positive_denominator_n) == (60.0, 3, 5)
+    assert (g1.CMR, g1.CPCR, g1.CFCR) == (20.0, 20.0, 60.0)
+    assert (g1.central_missing_n, g1.central_partial_n, g1.central_addressed_n, g1.central_denominator_n) == (1, 1, 3, 5)
+    assert (g1.MDI, g1.major_discrepancy_feedbacks_n, g1.evaluated_feedbacks_n) == (100.0, 2, 2)
+    g2 = summary.loc["G2"]
+    assert (g2.PRR, g2.CMR, g2.CPCR, g2.CFCR, g2.MDI) == (33.33, 66.67, 33.33, 0.0, 0.0)
+
+
+def test_micro_coverage_distribution_identity():
+    summary = stability.summarize_micro_feedback_metrics(micro_rows())
+    defined = summary[summary.central_denominator_n > 0]
+    assert ((defined.central_missing_n + defined.central_partial_n + defined.central_addressed_n)
+            == defined.central_denominator_n).all()
+    assert (defined[["CMR", "CPCR", "CFCR"]].sum(axis=1) - 100).abs().max() <= 0.02
+    with pytest.raises(ValueError, match="partition"):
+        stability.summarize_micro_feedback_metrics(micro_rows(central_addressed_n=[3, 1, 0, 0]))
+
+
+def test_micro_metrics_zero_denominators_and_unexecuted_slots():
+    summary = stability.summarize_micro_feedback_metrics(micro_rows()).set_index("Generator")
+    g3 = summary.loc["G3"]
+    assert pd.isna(g3.PRR) and pd.isna(g3.CMR) and pd.isna(g3.CPCR) and pd.isna(g3.CFCR)
+    assert (g3.positive_denominator_n, g3.central_denominator_n, g3.MDI) == (0, 0, 0.0)
+    pending = micro_rows(
+        positive_addressed_n=[3, None, 1, 0], positive_rate_denominator_n=[4, None, 3, 0],
+        central_missing_n=[1, None, 2, 0], central_partial_n=[1, None, 1, 0],
+        central_addressed_n=[2, None, 0, 0], central_rate_denominator_n=[4, None, 3, 0],
+        any_major_issue=[True, None, False, None],
+    )
+    summary = stability.summarize_micro_feedback_metrics(pending).set_index("Generator")
+    assert (summary.loc["G1"].PRR, summary.loc["G1"].evaluated_feedbacks_n) == (75.0, 1)
+    assert pd.isna(summary.loc["G3"].MDI) and summary.loc["G3"].evaluated_feedbacks_n == 0
+    with pytest.raises(ValueError, match="one packet per reflection"):
+        stability.summarize_micro_feedback_metrics(pd.concat([pending, pending.iloc[[0]]]))
+
+
+def test_micro_mdi_uses_judge_major_flag_not_missing_concerns():
+    rows = micro_rows(central_missing_n=[4, 1, 3, 0], central_partial_n=[0, 0, 0, 0],
+                      central_addressed_n=[0, 0, 0, 0], any_major_issue=[False, False, False, False])
+    summary = stability.summarize_micro_feedback_metrics(rows).set_index("Generator")
+    assert summary.loc["G1"].CMR == 100.0
+    assert summary.loc["G1"].MDI == 0.0
 
 
 def evaluability_inventory(source):
@@ -450,9 +720,23 @@ def priority_output(source, concern_id="R1"):
     return data
 
 
+def test_refined_prompt_retains_shape_and_requires_non_circular_reference_relative_severity():
+    text = resolve_prompt("feedback_quality_llm_judge", "0.12.0").text
+    assert "nicht automatisch einen unabhängig bestätigten pädagogischen Qualitätsmangel" in text
+    assert "die Zentralität oder Nichtabdeckung allein genügt nicht" in text
+    assert "anhand des konkreten Feedbacks" in text
+    assert "Abdeckung einzelner Referenzanliegen wird unabhängig von der Gruppierung" in text
+    assert "central_omission zusätzlich ausschließlich zentrale Anliegen" in text
+    assert (
+        ReferencePriorityJudgeOutput.model_json_schema()["properties"]
+        == RefinedReferencePriorityJudgeOutput.model_json_schema()["properties"]
+    )
+
+
 @pytest.mark.parametrize("evaluability", ["evaluable", "partially_evaluable"])
 @pytest.mark.parametrize("severity", ["major", "minor"])
-def test_uncertain_central_reference_can_justify_issue_without_mutation(evaluability, severity):
+@pytest.mark.parametrize("version", ["0.11.0", "0.12.0"])
+def test_uncertain_central_reference_can_justify_issue_without_mutation(evaluability, severity, version):
     source = reference_input_from_packet(packet(), "126")
     inventory = evaluability_inventory(source)
     inventory["reference_concerns"][0].update(
@@ -465,7 +749,7 @@ def test_uncertain_central_reference_can_justify_issue_without_mutation(evaluabi
     data["overall_severity"] = severity
     record = run_quality_judge(
         model=FakeChatModel(data), packet=p, provider="test", model_name="fake",
-        feedback_prompt_version="0.11.0",
+        feedback_prompt_version=version,
     )
     assert record["schema_version"] == "2.3.0"
     assert record["result"]["issues"][0]["severity_basis"] == "documented_reference_deviation"
@@ -501,15 +785,76 @@ def test_priority_issue_eligibility_is_enforced(change):
         )
 
 
-@pytest.mark.parametrize("support", ["uncertain", "unsupported"])
-def test_uncertain_or_unsupported_missing_coverage_is_not_automatically_an_issue(support):
+@pytest.mark.parametrize("support", ["supported", "uncertain"])
+@pytest.mark.parametrize("evaluability", ["evaluable", "partially_evaluable"])
+@pytest.mark.parametrize("issue_type", ["secondary_omission", "contradiction", "misleading_emphasis"])
+def test_refined_secondary_concerns_can_justify_minor_but_not_major(support, evaluability, issue_type):
     source = reference_input_from_packet(packet(), "126")
     inventory = evaluability_inventory(source)
-    inventory["reference_concerns"][0]["reference_support"] = support
+    inventory["reference_concerns"][0].update(
+        centrality="secondary", reference_support=support, evaluability=evaluability,
+    )
+    p = with_inventory(packet(), inventory)
+    before = copy.deepcopy(p)
+    data = priority_output(source)
+    data["overall_severity"] = "minor"
+    issue = data["issues"][0]
+    issue.update(
+        issue_type=issue_type, severity="minor",
+        rationale="The advice omits a concrete secondary lecturer qualification.",
+        consequence="The proposed next step loses a bounded qualification, not the main direction.",
+    )
+    if issue_type != "secondary_omission":
+        issue["generated_references"] = [{
+            "component": "strengths", "item_index": 0, "excerpt": "Your description is clear.",
+        }]
+    record = run_quality_judge(
+        model=FakeChatModel(data), packet=p, provider="test", model_name="fake",
+        feedback_prompt_version="0.12.0",
+    )
+    assert record["schema_version"] == "2.3.0"
+    assert record["prompt_version"] == "0.12.0"
+    assert p == before
+    if support == "uncertain":
+        with pytest.raises(ValueError, match="require central concerns"):
+            validate_frozen_concern_output(ReferencePriorityJudgeOutput.model_validate(data), p)
+    issue["severity"] = "major"
+    data["overall_severity"] = "major"
+    with pytest.raises(ValueError):
+        validate_frozen_concern_output(RefinedReferencePriorityJudgeOutput.model_validate(data), p)
+
+
+@pytest.mark.parametrize("change", ["unsupported", "not_evaluable", "central_omission"])
+def test_refined_secondary_policy_preserves_exclusions(change):
+    source = reference_input_from_packet(packet(), "126")
+    inventory = evaluability_inventory(source)
+    inventory["reference_concerns"][0].update(centrality="secondary", reference_support="uncertain")
+    data = priority_output(source)
+    data["overall_severity"] = "minor"
+    data["issues"][0].update(issue_type="secondary_omission", severity="minor")
+    if change == "unsupported":
+        inventory["reference_concerns"][0]["reference_support"] = "unsupported"
+    elif change == "not_evaluable":
+        data["issues"][0]["concern_ids"] = ["R2"]
+    else:
+        data["issues"][0]["issue_type"] = "central_omission"
+    with pytest.raises(ValueError):
+        validate_frozen_concern_output(
+            RefinedReferencePriorityJudgeOutput.model_validate(data), with_inventory(packet(), inventory),
+        )
+
+
+@pytest.mark.parametrize("support", ["uncertain", "unsupported"])
+@pytest.mark.parametrize("centrality", ["central", "secondary"])
+@pytest.mark.parametrize("output_model", [ReferencePriorityJudgeOutput, RefinedReferencePriorityJudgeOutput])
+def test_uncertain_or_unsupported_missing_coverage_is_not_automatically_an_issue(support, centrality, output_model):
+    source = reference_input_from_packet(packet(), "126")
+    inventory = evaluability_inventory(source)
+    inventory["reference_concerns"][0].update(reference_support=support, centrality=centrality)
     p = with_inventory(packet(), inventory)
     data = applicable_output()
     data["schema_version"] = "2.3.0"
-    validate_frozen_concern_output(ReferencePriorityJudgeOutput.model_validate(data), p)
+    validate_frozen_concern_output(output_model.model_validate(data), p)
     assert data["overall_severity"] == "no_error"
 
 

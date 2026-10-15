@@ -62,6 +62,17 @@ def save_private(path: Path, value: Any) -> None:
         staged.unlink(missing_ok=True)
 
 
+def execute_inference_cells(notebook: dict, cell_ids: tuple[str, ...], namespace: dict) -> None:
+    for cell_id in cell_ids:
+        matches = [
+            cell for cell in notebook["cells"]
+            if cell.get("id") == cell_id and cell["cell_type"] == "code"
+        ]
+        if len(matches) != 1:
+            raise ValueError(f"Expected one inference code cell with ID {cell_id!r}.")
+        exec(compile("".join(matches[0]["source"]), f"inference:cell-{cell_id}", "exec"), namespace)
+
+
 def prepare(cohort: str = "remaining-test") -> tuple[dict, dict, Path, dict]:
     if cohort not in {"playground", "remaining-test"}:
         raise ValueError("Cohort must be 'playground' or 'remaining-test'.")
@@ -93,8 +104,7 @@ def prepare(cohort: str = "remaining-test") -> tuple[dict, dict, Path, dict]:
         "__name__": "__g2_direct_evaluation__",
         "INFERENCE_COHORT": cohort,
     }
-    for index in (1, 3, 5):
-        exec(compile("".join(notebook["cells"][index]["source"]), f"inference:cell-{index}", "exec"), namespace)
+    execute_inference_cells(notebook, ("013ae5b7", "69967bea", "eb88459f"), namespace)
     expected_ids = set(
         load_playground_feedback_cohort()["document_id"].astype(str)
         if cohort == "playground"
@@ -133,8 +143,7 @@ def prepare(cohort: str = "remaining-test") -> tuple[dict, dict, Path, dict]:
     print("Protected G2 evaluation batch:", batch, flush=True)
     missing = [document_id for document_id in provenance["document_ids"] if not (batch / "predictions" / f"document-{document_id}.json").exists()]
     if missing:
-        for index in (7, 9, 11):
-            exec(compile("".join(notebook["cells"][index]["source"]), f"inference:cell-{index}", "exec"), namespace)
+        execute_inference_cells(notebook, ("ff81f175", "c42494c8", "6be7a3e1"), namespace)
         for document_id in missing:
             document = namespace["DEVELOPMENT_DOCUMENTS"][document_id]
             save_private(batch / "predictions" / f"document-{document_id}.json", {

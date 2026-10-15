@@ -20,7 +20,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--document-id", default="3")
     parser.add_argument("--additional-document-id", action="append", default=[])
-    parser.add_argument("--feedback-prompt-version", choices=("0.4.0", "0.5.0", "0.6.0", "0.7.0", "0.8.0", "0.9.0", "0.10.0", "0.11.0"), default="0.4.0")
+    parser.add_argument("--feedback-prompt-version", choices=("0.4.0", "0.5.0", "0.6.0", "0.7.0", "0.8.0", "0.9.0", "0.10.0", "0.11.0", "0.12.0"), default="0.4.0")
     parser.add_argument("--reference-inventory-id", action="append", default=[], metavar="DOCUMENT=SHA256")
     parser.add_argument("--judge-repetitions", type=int, default=3)
     parser.add_argument("--approve-external-processing", action="store_true")

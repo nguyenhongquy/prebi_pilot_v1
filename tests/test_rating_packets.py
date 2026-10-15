@@ -228,7 +228,11 @@ def test_reference_packet_is_independent_and_shares_stable_reflection_identity()
     assert reference_packet["reflection_id"] == assessment_packet["reflection_id"]
     assert reference_packet["task"] == "reflection_reference_score"
     assert reference_packet["protocol_id"] == "reflection_reference_score_human"
-    assert reference_packet["protocol_version"] == "0.1.0"
+    assert reference_packet["protocol_version"] == "0.2.0"
+    protocol_text = reference_packet["human_protocol"]
+    assert "Kommentar (optional)" in protocol_text
+    assert "not averaged" in protocol_text
+    assert "evidence links" not in protocol_text and "consensus" not in protocol_text
     assert reference_packet["scale"] == {
         "min": 0,
         "max": 3,

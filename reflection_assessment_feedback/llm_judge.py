@@ -126,6 +126,8 @@ def judge_output_model(task: str, prompt_version: str) -> type[StrictJudgeModel]
         return ApplicableConcernJudgeOutput
     if task == "feedback_quality" and prompt_version == "0.11.0":
         return ReferencePriorityJudgeOutput
+    if task == "feedback_quality" and prompt_version == "0.12.0":
+        return RefinedReferencePriorityJudgeOutput
     return JUDGE_OUTPUT_MODELS[task]
 
 
@@ -405,6 +407,10 @@ class ReferencePriorityJudgeOutput(
     pass
 
 
+class RefinedReferencePriorityJudgeOutput(ReferencePriorityJudgeOutput):
+    pass
+
+
 def validate_frozen_concern_output(output: FrozenConcernJudgeOutput, packet: dict) -> None:
     inventory = parse_inventory(packet["reference_inventory"])
     if isinstance(output, (EvaluableConcernJudgeOutput, ApplicableConcernJudgeOutput)) and not isinstance(inventory, EvaluableConcernInventory):
@@ -449,11 +455,15 @@ def validate_frozen_concern_output(output: FrozenConcernJudgeOutput, packet: dic
                     raise ValueError("Reference issues must explicitly identify documented reference deviation.")
                 if any(concerns[c].reference_support == "unsupported" for c in issue.concern_ids):
                     raise ValueError("Unsupported reference concerns cannot justify reference-deviation issues.")
-                if any(
+                if not isinstance(output, RefinedReferencePriorityJudgeOutput) and any(
                     concerns[c].reference_support == "uncertain" and concerns[c].centrality != "central"
                     for c in issue.concern_ids
                 ):
                     raise ValueError("Uncertain reference-deviation issues require central concerns.")
+                if isinstance(output, RefinedReferencePriorityJudgeOutput) and issue.severity == "major" and not any(
+                    concerns[c].centrality == "central" for c in issue.concern_ids
+                ):
+                    raise ValueError("Major reference-deviation issues require a central concern.")
             elif issue.severity_basis != "independent_generated_error":
                 raise ValueError("Independent generated errors must identify their independent severity basis.")
         if issue.issue_type in {"central_omission", "secondary_omission"} and any(
@@ -555,11 +565,11 @@ def build_judge_input(
         if not isinstance(summary, dict) or summary.get("analysis_source") != "provisional_gold_candidate_annotations":
             raise ValueError("Assessment judge requires a provisional gold-analysis summary.")
         judge_input["gold_analysis_summary"] = summary
-    if task == "feedback_quality" and feedback_prompt_version in {"0.8.0", "0.9.0", "0.10.0", "0.11.0"}:
+    if task == "feedback_quality" and feedback_prompt_version in {"0.8.0", "0.9.0", "0.10.0", "0.11.0", "0.12.0"}:
         if "reference_inventory" not in packet or "reference_inventory_ref" not in packet:
             raise ValueError("Frozen-concern judge requires an approved reference inventory.")
         inventory = parse_inventory(packet["reference_inventory"])
-        if feedback_prompt_version in {"0.9.0", "0.10.0", "0.11.0"} and not isinstance(inventory, EvaluableConcernInventory):
+        if feedback_prompt_version in {"0.9.0", "0.10.0", "0.11.0", "0.12.0"} and not isinstance(inventory, EvaluableConcernInventory):
             raise ValueError("Evaluability-aware judging requires inventory schema 1.1.0.")
         if feedback_prompt_version == "0.8.0" and isinstance(inventory, EvaluableConcernInventory):
             raise ValueError("Inventory schema 1.1.0 requires feedback prompt 0.9.0.")
@@ -664,7 +674,7 @@ def run_quality_judge(
         "prompt_artifact_sha256": prompt_artifact.sha256,
         "rendered_prompt_sha256": rendered_prompt_sha256,
     }
-    if task == "feedback_quality" and prompt_artifact.version in {"0.8.0", "0.9.0", "0.10.0", "0.11.0"}:
+    if task == "feedback_quality" and prompt_artifact.version in {"0.8.0", "0.9.0", "0.10.0", "0.11.0", "0.12.0"}:
         trace_metadata["reference_inventory_ref"] = packet["reference_inventory_ref"]
     raw_output = invoke_judge_model(
         model=model, schema=output_model, prompt=rendered_prompt, metadata=trace_metadata,

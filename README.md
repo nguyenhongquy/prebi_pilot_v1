@@ -43,6 +43,44 @@ Research packets, condition keys, credentials, and rating exports must remain
 outside the public submodule. Use this submodule as the authoritative UI working
 copy rather than maintaining a second independent copy.
 
+### Blinded pairwise packet generation
+
+The evaluator-facing generator is
+`reflection_assessment_feedback.pairwise_packets`. It combines the newest
+G1/G3 comparison for each selected reflection with the current author-disjoint
+G2 batch, then writes one fixed-order bundle per pseudonymous evaluator and a
+separate protected condition key. Bundles use schema `1.2.0` and embed the
+`reference_scoring` block (reference-score protocol `0.2.0`, rubric SW/UA/HA
+anchors, 0–3 scale in 0.5 steps). Experts score each reflection there before the
+feedback is unlocked. It requires the active prompt versions and
+checks evidence references, human annotations, rubric/pipeline provenance, and
+the evaluator schema. It does not call a model provider and refuses to mix
+stale prompts or incomplete cohorts.
+
+Evidence references must point to segments of the same reflection. A statement
+may cite no segment, for example when it names content the reflection lacks.
+Such statements are kept unchanged, and the UI labels them "Keine Belege
+angegeben". For `remaining-test`, the preflight selects exactly the G1/G2/G3 runs
+of result freeze `c47b1312…4324` (generation `2.0.0`). Two of those statements
+cite no segment.
+
+Run a validation-only preflight first; add `--write` only after the preflight
+succeeds and the evaluator IDs have been approved:
+
+```bash
+uv run python -m reflection_assessment_feedback.pairwise_packets \
+  --protected-root "$PREBI_DATA_ROOT" \
+  --cohort remaining-test \
+  --evaluator-id expert-01 \
+  --evaluator-id expert-02
+```
+
+The destination is
+`$PREBI_DATA_ROOT/pairwise-evaluations/development/<cohort>/`. Evaluator
+bundles are under `bundles/`; `condition-key.json` remains outside that
+directory. Existing exports are never overwritten. Upload only the assigned
+evaluator's JSON bundle to the UI; never distribute the condition key.
+
 ## Running the Notebooks
 
 | Order | Notebook                                                                      | Purpose                                                  |
@@ -59,6 +97,7 @@ copy rather than maintaining a second independent copy.
 | 09    | [09_llm_judge_analysis.ipynb](09_llm_judge_analysis.ipynb)                     | Current cross-batch G1/G2/G3 coverage and paired quality comparisons |
 | 10    | [10_generation_consistency.ipynb](10_generation_consistency.ipynb)             | Independent G1/G2/G3 repetitions and categorical agreement |
 | 11    | [11_judge_stability.ipynb](11_judge_stability.ipynb)                           | Frozen-input judge repetitions, criterion stability and rubric review |
+| 12    | [12_reference_feedback_judge.ipynb](12_reference_feedback_judge.ipynb)         | Frozen reference inventories, feedback discrepancy judging and measurement extraction |
 
 - Training, provider calls, and exports retain their explicit switches.
 - Segment evaluation can run after inference independently of generation.
@@ -138,7 +177,7 @@ Open a notebook in VS Code and select the workspace `.venv` Python kernel. Keep 
 
 Shared, non-secret experiment settings are in [config/experiment.toml](config/experiment.toml): data selectors and paths, classifier hyperparameters, generator model and repetitions, expected prompt/rubric versions, tracing preference, and evaluation seed. The notebooks load this file through `reflection_assessment_feedback.experiment_config`; persisted prediction and generation artifacts include its SHA-256 fingerprint. Keep API keys and `PREBI_DATA_ROOT` in the local `.env`, not in TOML. Runtime actions such as training, writing predictions, provider approval, and metric export remain explicit notebook switches.
 
-Versioned prompt artifacts and human coding protocols live under [prompts/](prompts/), indexed by [prompts/manifest.json](prompts/manifest.json). The active generation prompt is `generation@2.0.0`; its G2 predicted-analysis and G3 observed-human-analysis supplemental sections are separate versioned prompt fragments. Human assessment and feedback protocols remain pinned to assessment `0.3.0` and feedback `0.2.0`, with three-point ratings plus unable-to-judge. The German LLM-judge prompts are separately pinned to assessment `0.5.0` and feedback `0.3.0`. Both include matched teacher-educator feedback as an expert reference; the assessment judge also receives aggregate candidate-grain gold scope/band counts, missingness, review, and ambiguity summaries. These references inform judgments but are not treated as infallible gold labels or exact targets. Assessment criteria are Score-Rubric Fit, Evidence Support, and Justification Quality; feedback criteria are Correctness and Developmental Usefulness. Feedback-implied coding remains raw scores 0.0-3.0 in tenths, with human guide `0.1.0` and LLM prompt `0.2.0`. All rating instruments are development drafts requiring calibration before confirmatory use. [prompt_registry.py](reflection_assessment_feedback/prompt_registry.py) verifies artifact hashes and renders templates with exact variable checking. The rubric is a separate versioned instrument under [rubrics/](rubrics/), not prompt text. New generation runs store prompt-component, rubric-artifact, and fully rendered prompt hashes; rating records likewise store prompt and input provenance.
+Versioned prompt artifacts and human coding protocols live under [prompts/](prompts/), indexed by [prompts/manifest.json](prompts/manifest.json). The active generation prompt is `generation@2.0.0`; its G2 predicted-analysis and G3 observed-human-analysis supplemental sections are separate versioned prompt fragments. Human assessment and feedback protocols remain pinned to assessment `0.3.0` and feedback `0.2.0`, with three-point ratings plus unable-to-judge. The German LLM-judge prompts are separately pinned to assessment `0.5.0` and feedback `0.3.0`. Both include matched teacher-educator feedback as an expert reference; the assessment judge also receives aggregate candidate-grain gold scope/band counts, missingness, review, and ambiguity summaries. These references inform judgments but are not treated as infallible gold labels or exact targets. Assessment criteria are Score-Rubric Fit, Evidence Support, and Justification Quality; feedback criteria are Correctness and Developmental Usefulness. Feedback-implied coding remains raw scores 0.0-3.0 in tenths, with human guide `0.1.0` and LLM prompt `0.2.0`. Independent human reference scoring of SW/UA/HA uses protocol `reflection_reference_score_human@0.2.0`: one required score from 0.0 to 3.0 in half points per dimension, an optional comment, no evidence-segment selection, and separate per-expert score sets that are not averaged. All rating instruments are development drafts requiring calibration before confirmatory use. [prompt_registry.py](reflection_assessment_feedback/prompt_registry.py) verifies artifact hashes and renders templates with exact variable checking. The rubric is a separate versioned instrument under [rubrics/](rubrics/), not prompt text. New generation runs store prompt-component, rubric-artifact, and fully rendered prompt hashes; rating records likewise store prompt and input provenance.
 
 ### Document assessment pipeline 2.0.0
 
@@ -914,6 +953,268 @@ counts therefore remain distinct from comparable fixed concern-level outcomes.
 All Issues in this pilot use `severity_basis=documented_reference_deviation`.
 One judgment per output does not establish judge stability or a generator ranking.
 
+### Reference-relative severity refinement
+
+Feedback prompt `0.12.0` is a small clarification of `0.11.0`; the output schema
+remains `2.3.0`. Reference-based Issues measure consequential discrepancies from
+documented lecturer priorities, not automatically independently established
+pedagogical quality deficits. Human experts assess pedagogical quality separately.
+
+Both supported and uncertain, at least partially evaluable secondary concerns may
+justify minor Issues when a substantive consequence is explained; missing coverage
+alone is insufficient. A reference-based major Issue requires a central concern
+and a concrete material change to the documented developmental direction or core
+message, beyond merely restating centrality or absence. `central_omission` still
+requires exclusively central concern links. Grouping closely related Issues does
+not change the separately recorded coverage of each fixed concern.
+
+Unsupported and non-evaluable reference concerns remain excluded from
+reference-based Issues; partially evaluable concerns remain limited to their
+frozen scope. Validation enforces eligibility and the secondary-only minor cap;
+the adequacy of the consequence explanation is a prompt-level requirement for
+subsequent calibration, not something structural validation can establish.
+Use `--feedback-prompt-version 0.12.0` for a prospective study. Historical
+`0.11.0` artifacts, rules and judgments remain unchanged. This update performs no
+extraction or judge provider calls.
+
+The subsequent `0.12.0` playground pilot completed six fresh calls with six
+validated saved judgments and no replacements. Study ID:
+`79a0529c5f303e38825ec691e46f817ead0194437b0c633f2ce54f757633318c`.
+The packets and approved inventories match the `0.11.0` pilot exactly; resume was
+verified to make zero additional judge calls.
+
+| Document | Generator | Overall | Major Issues | Minor Issues |
+| --- | --- | --- | --- | --- |
+| 3 | G1 | major | 1 | 0 |
+| 3 | G2 | major | 1 | 0 |
+| 3 | G3 | major | 1 | 1 |
+| 126 | G1 | major | 2 | 0 |
+| 126 | G2 | major | 2 | 0 |
+| 126 | G3 | major | 2 | 0 |
+
+For document 3, every judgment groups R3/R5/R6/R8 into one material change of
+developmental direction: feedback focuses on action alternatives instead of the
+lecturer's requested analytical development. G2 uses `misleading_emphasis`, G1/G3
+use `central_omission`; G3 additionally assigns a minor omission to partially
+addressed R10. All three mark R9 missing without creating a separate Issue.
+Coverage is identical across generators for this document in this run, including
+R10 `partially_addressed` for G1 (previously `addressed` under `0.11.0`).
+Reduced Issue counts therefore reflect grouping and eligibility decisions, not
+improved generated feedback.
+
+For document 126, R3 and the current evaluable scope of R5 remain missing with
+major reference-deviation Issues for every generator. R1/R2 remain
+`not_applicable`; R4 is addressed for G1/G3 and missing for G2 without an Issue.
+The inspected rationales explain changes to the concrete developmental guidance
+and distinguish reference discrepancies from independent pedagogical defects.
+All Issues use `documented_reference_deviation`. With one call per output,
+neither stability nor a causal effect of the prompt revision is established.
+
+### Packet-level feedback measurements
+
+`extract_feedback_measurements(study_directory)` in
+[`judge_stability.py`](reflection_assessment_feedback/judge_stability.py) performs
+local-only extraction from validated frozen-inventory studies. It returns
+`measurements` (one row per packet and judge repetition, never pooled across
+repetitions) and `concern_coverage` (every concern, including excluded concerns).
+The regular `analyze_judge_study` output also includes both tables.
+
+The measurement columns are:
+`reflection_id`, `packet_id`, `condition`, `generation_repetition`,
+`judge_repetition`, `central_actionable_n`, `central_missing_n`,
+`central_partial_n`, `central_missing_rate`, `central_full_coverage_rate`,
+`any_major_issue`, `any_major_contradiction`, `overall_severity`.
+
+- Central actionable concerns are central **critical or developmental** concerns,
+  with supported or uncertain reference support and at least partially evaluable
+  scope. Positive, secondary, unsupported and non-evaluable concerns are excluded.
+  Legacy inventory schema 1.0 has no evaluability field; its concerns are treated
+  as evaluable under that historical protocol, without changing the inventory.
+- `central_actionable_n` counts eligible concerns, including `unable_to_judge`.
+  The two rates exclude `unable_to_judge` from their denominator. Missing rate
+  counts only `missing`; full coverage counts only `addressed`. Partial coverage
+  is counted separately and receives no fractional credit.
+- Zero-denominator rates are null, not zero. For unexecuted planned slots,
+  actionable count remains known, but outcome counts, rates and Issue flags are
+  null and overall severity is `missing`, distinct from `unable_to_judge`.
+- Issue flags use actual Issues, independent of coverage and Issue grouping.
+  `any_major_contradiction` requires both type `contradiction` and severity `major`;
+  independently identified generated contradictions are included.
+
+The concern audit retains frozen definitions, types, support, evaluability/scope,
+inventory identifiers/hashes, coverage rationale, generated excerpts and evidence.
+It adds `central_actionable`, `in_coverage_rate_denominator`,
+`judgment_available`, and zero-based `linked_issue_indices` into the judgment's
+Issues list. These flags make denominators, exclusions and sensitivity analyses
+reconstructible without conflating missing coverage with a substantive Issue.
+Exports contain protected feedback and must remain in protected storage.
+
+```python
+from reflection_assessment_feedback.judge_stability import extract_feedback_measurements
+
+tables = extract_feedback_measurements(STUDY_DIRECTORY)
+packet_measurements = tables["measurements"]
+concern_audit = tables["concern_coverage"]
+```
+
+### Four feedback discrepancy metrics
+
+Notebook 12 is configured for the remaining-test run: 18 reflections selected
+from the paused assessment study's frozen reference inputs, extractor `0.2.0`,
+judge `0.12.0`, and one judge repetition per G1/G2/G3 output. The assessment study
+is only read, never resumed. Reference inputs were checked against all 54 saved
+feedback packets. No playground inventories are reused.
+
+The user authorized automatic finalization for these remaining-test inventories;
+`AUTO_FINALIZE_INVENTORIES=True` records that authorization after each validated
+extraction. Provider actions still default off. To execute, enable
+`EXTRACT_INVENTORIES`, `FREEZE_STUDY`, `RUN_JUDGE`,
+`APPROVE_EXTERNAL_PROCESSING` and `APPROVE_FULL_BATCH` in the settings cell, then
+run the extraction-through-measurement cells in order. At most 18 uncached
+extraction calls and 54 unsaved judge calls are planned, excluding replacement
+attempts. For manual inventory review, disable automatic finalization and use
+the separate approval cell. Existing-study analysis and protected export remain
+available; the optional playground metrics cell is separate from test analysis.
+Preparing this configuration does not itself start provider calls.
+
+`summarize_feedback_metrics(measurements)` reports these metrics by condition,
+generation repetition and judge repetition (repetitions are never pooled):
+
+| Metric | Packet-level definition | Direction |
+| --- | --- | --- |
+| Positive Recognition Rate (PRR) | Addressed positive concerns / eligible positive concerns | Higher |
+| Central Missing Rate (CMR) | Missing central actionable concerns / eligible central actionable concerns | Lower |
+| Central Full Coverage Rate (CFCR) | Addressed central actionable concerns / eligible central actionable concerns | Higher |
+| Major Discrepancy Incidence | Feedbacks containing at least one major Issue / evaluated feedbacks | Lower |
+
+PRR includes positive concerns of any centrality with supported/uncertain support
+and at least partially evaluable scope. It excludes `unable_to_judge` from its
+denominator and gives no numerator credit to partial coverage, like CMR/CFCR.
+The packet table adds `positive_eligible_n`, `positive_addressed_n`,
+`positive_rate_denominator_n` and `positive_recognition_rate`. The audit adds
+`positive_eligible` and `in_positive_rate_denominator`. Existing measurement
+columns are retained; previously saved exports are not rewritten.
+
+PRR/CMR/CFCR summaries are equal-weight means of available reflection-level rates,
+with separate available-reflection counts. Undefined rates are excluded, not
+converted to zero. Major Discrepancy Incidence excludes unexecuted feedbacks
+(null Issue flags), includes evaluated `unable_to_judge` judgments, and counts each
+feedback once irrespective of how many major Issues it contains. Numerator and
+denominator counts are reported. Duplicate feedbacks within a reflection and
+repetition are rejected to prevent accidental over-weighting.
+Notebook 12's playground metrics cell displays all four metrics.
+
+#### Micro-averaged generator metrics
+
+`summarize_micro_feedback_metrics(measurements)` sums counts across reflections
+before dividing. It returns one row per generator (`Generator`) and repetition
+(repetitions are never pooled), with percentages rounded to two decimals and the
+raw numerators and denominators:
+
+| Metric | Definition | Direction |
+| --- | --- | --- |
+| PRR | Fully addressed positive concerns / eligible positive concerns | Higher |
+| CMR | Missing central concerns / eligible central concerns | Lower |
+| CPCR | Partially addressed central concerns / eligible central concerns | — |
+| CFCR | Fully addressed central concerns / eligible central concerns | Higher |
+| MDI | Feedbacks with at least one judge-classified major Issue / evaluated feedbacks | Lower |
+
+Central concerns are the central actionable critical/developmental concerns
+defined above. Eligibility and exclusions (unsupported, non-evaluable,
+`unable_to_judge`) are unchanged. CMR, CPCR and CFCR form one coverage
+distribution that sums to 100% (up to rounding), not three independent quality
+measures. The function rejects data in which those outcomes do not partition
+the denominator. Zero denominators yield null. MDI uses only the judge's major
+Issue flags; missing concerns are never treated as discrepancies. The packet
+measurement table adds `central_addressed_n` and `central_rate_denominator_n`
+to support these sums.
+
+### Frozen remaining-test feedback results (generation 2.0.0, judge 0.12.0)
+
+These are the accepted reference-relative feedback results for G1/G2/G3. The
+result set is sealed as freeze
+`c47b1312615166c2c5216d0c2601fc4a0ea5d869f9cb0d384cb120bd5e984324` under
+`PREBI_DATA_ROOT/llm-judge/result-freezes/` (frozen 2026-10-15).
+
+| Item | Frozen value |
+| --- | --- |
+| Cohort | `remaining-test`, 18 reflections: 36, 39, 42, 49, 51, 96, 99, 102, 110, 113, 158, 161, 164, 172, 174, 224, 231, 233 |
+| Generators | G1, G2, G3; Gemini `gemini-3.5-flash-lite`; generation prompt and all supplemental components `2.0.0`; pipeline `2.0.0`; rubric `1.2.0`; one generation repetition |
+| G1, G3 source | Study `a31a8ec016cedcc21939be1fc249e940b20ad8911a31934be7dd724a5176f6c3` |
+| G2 source | Author-disjoint direct GBERT G2, study `66128161ef618afbaea11928e5abf040cb3df103e8837fda5b229e790b1656aa`. The earlier G2 in the combined study is excluded |
+| Judge | OpenAI `gpt-6.1-sol`, feedback prompt `0.12.0`, judge repetition 1 only |
+| Reference | One identical frozen lecturer-concern inventory per reflection, shared by all generators (IDs and hashes in the manifest) |
+
+The manifest records the hashes of both study manifests, all 54 judge result
+files, the embedded generation artifacts, inventories, frozen inputs and prompt
+components, and the computed metrics. Freezing makes no provider calls, never
+overwrites, and rejects runs that are not prompt `2.0.0`. It also rejects unsaved
+judgments, missing or duplicate generators, and mismatched reflections or
+inventories. To re-verify against the current study data (local only):
+
+```python
+from reflection_assessment_feedback.feedback_result_freeze import verify_feedback_result_freeze
+verify_feedback_result_freeze(PREBI_DATA_ROOT, "c47b1312615166c2c5216d0c2601fc4a0ea5d869f9cb0d384cb120bd5e984324")
+```
+
+The freeze was created with
+`python -m reflection_assessment_feedback.feedback_result_freeze --label remaining-test-gen2.0.0-judge0.12.0-rep1 --select <combined-study>=G1,G3 --select <g2-study>=G2 --generation-prompt-version 2.0.0 --judge-prompt-version 0.12.0 --write`
+(omit `--write` to preview).
+
+Micro-averaged results (percentages; numerator/denominator):
+
+| Generator | PRR ↑ | CMR ↓ | CPCR | CFCR ↑ | MDI ↓ |
+| --- | --- | --- | --- | --- | --- |
+| G1 | 76.12 (51/67) | 62.50 (30/48) | 20.83 (10/48) | 16.67 (8/48) | 72.22 (13/18) |
+| G2 | 46.27 (31/67) | 54.17 (26/48) | 16.67 (8/48) | 29.17 (14/48) | 77.78 (14/18) |
+| G3 | 56.72 (38/67) | 47.92 (23/48) | 18.75 (9/48) | 33.33 (16/48) | 72.22 (13/18) |
+
+The same 67 positive and 48 central concerns form the denominators for every
+generator. Reflection 174 has no eligible central concern. No eligible concern
+was `unable_to_judge`.
+
+Descriptively:
+- G3 has the best central-concern distribution: the fewest missing and the most
+  fully addressed concerns. G1 has the worst.
+- G2 lies between G1 and G3 on central coverage but recognizes the fewest
+  positive concerns. G2 also has the most partially recognized positives (about a
+  quarter, versus a tenth for G1), which PRR does not credit.
+- G1 fully recognizes the most positive concerns.
+- Most feedbacks in every condition contain at least one major reference
+  discrepancy (12–14 of 18), so MDI barely separates the generators.
+
+These are reference-relative discrepancy measures against one lecturer's
+feedback, not independent pedagogical quality. They come from one generation and
+one judge repetition over 18 reflections, with no inferential tests. Human
+expert pairwise evaluation is reported separately.
+
+### Remaining playground inventory pilot
+
+Documents 64 and 188 completed extraction with prompt `0.2.0` and judging with
+`0.12.0`, one judgment per G1/G2/G3 output. The user explicitly authorized
+automatic inventory finalization for this pilot, rather than manual draft review.
+Document 64 has seven evaluable supported concerns (inventory
+`4e4a63a35e931ea846bd2aba2ca566c8129bc03aeba85996d6b9fc6e635028fc`);
+document 188 has nine evaluable concerns, eight supported and one uncertain
+(inventory `ea28f135268b5bae012235755b8e94fc72dfcf103e62f3fc4251174dbb66e343`).
+
+Study `a5656883504b3386383ede8a81be6eec2358e88efe23dbb624ed0b48bcca2ad8`
+contains six accepted judgments. The initial process stalled after four saved
+results; at the user's request it was stopped and resumed only for document
+188/G2 and document 64/G3. Both new calls succeeded. The interrupted request may
+have incurred provider cost; it is not an accepted judgment. No saved result was
+replaced. Final resume was verified to make zero further judge calls.
+
+All six overall verdicts are major reference discrepancies, with two major Issues
+per output for document 188 and one per output for document 64; no major
+contradictions were identified. Each reflection has four central actionable
+concerns. All four are missing for every output except document 64/G2, which has
+three missing and one partially addressed. No output fully addresses a central
+actionable concern in this run. The protected study's
+`feedback-measurements-v1.json` contains six measurement rows and 48 audit rows.
+Documents 3/126 were not rerun, and the remaining-test assessment study remains
+paused.
+
 ### Remaining-test reference-aware alignment study
 
 The original generation pipeline remains the baseline: G3 includes dimension
@@ -1041,6 +1342,40 @@ For G2-only evaluation using the new author-disjoint direct GBERT run, use
 .venv/bin/python scripts/evaluate_g2_direct_gbert.py --phase prepare
 .venv/bin/python scripts/evaluate_g2_direct_gbert.py --phase all --approve-external-processing
 ```
+
+For **generation prompt 2.0.0 followed by inventory-based feedback judging
+0.12.0 only**, use
+[scripts/run_g2_feedback_evaluation.py](scripts/run_g2_feedback_evaluation.py)
+instead of the older runner's `all` phase:
+
+```sh
+# Local-only: validate checkpoints, prepare predictions and check inventories.
+.venv/bin/python -m scripts.run_g2_feedback_evaluation --phase prepare
+
+# External provider calls: run only with approved data processing and budget.
+.venv/bin/python -m scripts.run_g2_feedback_evaluation --phase generate \
+  --approve-external-processing --approve-full-batch
+
+# Local-only: freeze the new G2 outputs with matching approved inventories.
+.venv/bin/python -m scripts.run_g2_feedback_evaluation --phase freeze
+
+# External provider calls: one feedback judgment per new G2 output.
+.venv/bin/python -m scripts.run_g2_feedback_evaluation --phase judge \
+  --approve-external-processing --approve-full-batch
+```
+
+This workflow does not regenerate G1/G3 or run the legacy quality judges.
+Inventories are reference-only and are reused only when the complete source
+and extractor 0.2.0 specification match, including the model. If preparation
+reports missing inventories, run `--phase inventories` with both approval
+flags, review the resulting drafts, and approve them through
+`python -m scripts.reference_concerns approve --inventory-id <id> --approved-by <reviewer>`
+before freezing. Existing unapproved drafts are never automatically approved.
+With 18 complete cached inventories, the planned uncached calls are 18 G2
+generations and 18 feedback judgments, excluding validation retries.
+All text-bearing inputs and results stay in protected storage; tracing follows
+the configured provider policy. Generation and judging resume validated saved
+records; do not launch concurrent generation processes for the same batch.
 
 The local prepare phase validates checkpoints and split hashes and predicts all
 18 documents. The approved external phase generates G2 with the configured
